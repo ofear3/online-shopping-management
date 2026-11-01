@@ -210,6 +210,17 @@ if (!function_exists('e')) {
                 <span>Customer Orders</span>
             </a>
 
+            <!-- Customers Management Link (নতুন যুক্ত করা হয়েছে) -->
+            <a href="customers.php"
+                class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition duration-150 <?= $currentPage === 'customers.php' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm' : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200' ?>"
+                <?= $currentPage === 'customers.php' ? 'aria-current="page"' : '' ?>>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                        d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                <span>Customer List</span>
+            </a>
+
             <div class="px-3 pt-4 pb-2 text-[10px] font-bold uppercase tracking-wider text-zinc-500"> Shortcuts </div>
 
             <a href="../index.php" target="_blank" rel="noopener noreferrer"
@@ -276,13 +287,14 @@ if (!function_exists('e')) {
             <span>Orders</span>
         </a>
 
-        <a href="../index.php" target="_blank" rel="noopener noreferrer"
-            class="flex flex-col items-center gap-1 text-[10px] font-medium text-zinc-400 hover:text-zinc-200">
+        <a href="customers.php"
+            class="flex flex-col items-center gap-1 text-[10px] font-medium <?= $currentPage === 'customers.php' ? 'text-emerald-400 font-semibold' : 'text-zinc-400 hover:text-zinc-200' ?>"
+            <?= $currentPage === 'customers.php' ? 'aria-current="page"' : '' ?>>
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
-                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
             </svg>
-            <span>Storefront</span>
+            <span>Customers</span>
         </a>
     </nav>
 

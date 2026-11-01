@@ -1,7 +1,10 @@
 <?php
 declare(strict_types=1);
 
-// ১. AJAX Request Handling (সবার উপরে রাখা হয়েছে)
+// বর্তমান ফাইলের সঠিক নাম ডাইনামিকভাবে বের করা (যাতে AJAX রিকোয়েস্ট ঠিকমতো একই ফাইলে আসে)
+$current_page = basename($_SERVER['PHP_SELF']);
+
+// ১. AJAX Request Handling (সবার উপরে রাখা হয়েছে)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_status_ajax') {
     // Database Config & Session
     require_once __DIR__ . '/../config/db.php';
@@ -32,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             if ($stmt->execute()) {
                 echo json_encode([
                     'success' => true,
-                    'message' => "Status Updated to {$matched_status}",
+                    'message' => "Order #$order_id status updated to {$matched_status}",
                     'new_status' => $matched_status
                 ]);
                 $stmt->close();
@@ -53,11 +56,14 @@ if (isset($_SESSION['toast_message'])) {
     unset($_SESSION['toast_message']);
 }
 
-// ৩. ডাটাবেজ থেকে অর্ডার ডাটা ফেচ
+// ৩. ডাটাবেজ থেকে অর্ডার ডাটা ফেচ (ইউজার ও কাস্টমার টেবিল থেকে সঠিক নাম এবং ফোন নম্বর আনার জন্য)
 $ordersResult = $conn->query("
-    SELECT o.*, u.name AS customer_name 
+    SELECT o.*, 
+           COALESCE(c.name, u.name, 'Guest Customer') AS customer_name,
+           COALESCE(c.phone, o.phone, '') AS phone
     FROM orders o 
     LEFT JOIN users u ON o.user_id = u.id 
+    LEFT JOIN customers c ON o.user_id = c.user_id 
     ORDER BY o.id DESC
 ");
 ?>
@@ -96,7 +102,7 @@ $ordersResult = $conn->query("
 
                                 <!-- Customer Name & Phone -->
                                 <td class="py-3.5 px-4">
-                                    <p class="font-bold text-zinc-200"><?= e($ord['customer_name'] ?? 'Guest Customer') ?></p>
+                                    <p class="font-bold text-zinc-200"><?= e($ord['customer_name']) ?></p>
                                     <?php if (!empty($ord['phone'])): ?>
                                         <a href="tel:<?= e(preg_replace('/[^0-9+]/', '', $ord['phone'])) ?>" 
                                            class="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 hover:underline mt-0.5">
@@ -108,8 +114,8 @@ $ordersResult = $conn->query("
 
                                 <!-- Shipping Address -->
                                 <td class="py-3.5 px-4">
-                                    <p class="text-zinc-300 truncate max-w-[200px]" title="<?= e($ord['shipping_address']) ?>">
-                                        <?= e($ord['shipping_address']) ?>
+                                    <p class="text-zinc-300 truncate max-w-[200px]" title="<?= e($ord['shipping_address'] ?? 'N/A') ?>">
+                                        <?= e($ord['shipping_address'] ?? 'N/A') ?>
                                     </p>
                                 </td>
 
@@ -185,6 +191,28 @@ $ordersResult = $conn->query("
 </div>
 
 <script>
+    // টোস্ট নোটিফিকেশন দেখানোর ফাংশন
+    function showToast(message) {
+        const toast = document.getElementById('toastNotification');
+        const msgElem = document.getElementById('toastMessage');
+        
+        if (toast && msgElem) {
+            msgElem.innerText = message;
+            toast.classList.remove('hidden');
+            setTimeout(() => {
+                toast.classList.remove('translate-y-20', 'opacity-0');
+            }, 10);
+
+            // ৩ সেকেন্ড পর হাইড হয়ে যাবে
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+                setTimeout(() => {
+                    toast.classList.add('hidden');
+                }, 300);
+            }, 3000);
+        }
+    }
+
     function handleStatusChange(orderId, newStatus) {
         if (!orderId || !newStatus) return;
 
@@ -209,16 +237,23 @@ $ordersResult = $conn->query("
             badge.className = 'px-2.5 py-1 rounded-lg border font-bold text-[10px] capitalize transition-all duration-300 ' + colorClass;
         }
 
-        // ২. ব্যাকগ্রাউন্ডে সাইレント ডাটাবেজ আপডেট (AJAX Request)
+        // ২. ডাইনামিক ফাইলের নামে ব্যাকগ্রাউন্ডে সাইレント ডাটাবেজ আপডেট (AJAX Request)
         const formData = new FormData();
         formData.append('action', 'update_status_ajax');
         formData.append('order_id', orderId);
         formData.append('status', newStatus);
 
-        fetch('orders.php', {
+        fetch('<?= $current_page ?>', {
             method: 'POST',
             body: formData
-        }).catch(err => console.error('Database Sync Error:', err));
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast(data.message);
+            }
+        })
+        .catch(err => console.error('Database Sync Error:', err));
     }
 </script>
 

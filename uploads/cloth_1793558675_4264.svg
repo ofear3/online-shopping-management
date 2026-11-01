@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" id="sequenceSvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1280" width="850" height="1208">
+                    <defs>
+                        <!-- Solid Arrowhead -->
+                        <marker id="arrowSolid" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                            <path d="M 0 1 L 10 5 L 0 9 z" fill="#000000"/>
+                        </marker>
+                        <!-- Open Arrowhead for Returns -->
+                        <marker id="arrowOpen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                            <path d="M 0 1 L 9 5 L 0 9" fill="none" stroke="#000000" stroke-width="1.8"/>
+                        </marker>
+                        <!-- Self Loop Arrowhead -->
+                        <marker id="arrowLoop" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                            <path d="M 0 1 L 10 5 L 0 9 z" fill="#000000"/>
+                        </marker>
+                    </defs>
+
+                    <style>
+                        .lifeline { stroke: #333333; stroke-width: 1.5; stroke-dasharray: 6 4; }
+                        .solid-msg { stroke: #000000; stroke-width: 1.5; marker-end: url(#arrowSolid); }
+                        .dash-msg { stroke: #000000; stroke-width: 1.5; stroke-dasharray: 5 4; marker-end: url(#arrowOpen); }
+                        .loop-path { stroke: #000000; stroke-width: 1.5; fill: none; marker-end: url(#arrowLoop); }
+                        .actor-head { fill: #ffffff; stroke: #000000; stroke-width: 2; }
+                        .actor-body { stroke: #000000; stroke-width: 2; stroke-linecap: round; }
+                        .box-frontend { fill: #f97316; stroke: #000000; stroke-width: 2; rx: 4; }
+                        .box-backend { fill: #eab308; stroke: #000000; stroke-width: 2; rx: 4; }
+                        .node-text { font-family: 'Arial', sans-serif; font-size: 14px; font-weight: bold; fill: #000000; text-anchor: middle; }
+                        .msg-text { font-family: 'Arial', sans-serif; font-size: 12px; font-weight: bold; fill: #000000; text-anchor: middle; }
+                        .caption-text { font-family: 'Times New Roman', serif; font-size: 18px; font-style: italic; font-weight: bold; fill: #1e3a8a; text-anchor: middle; }
+                    </style>
+
+                    <!-- Background White Canvas -->
+                    <rect width="100%" height="100%" fill="#ffffff"/>
+
+                    <!-- ==========================================
+                         LIFELINES & TOP HEADERS
+                    ========================================== -->
+
+                    <!-- 1. Customer Actor Top -->
+                    <g transform="translate(100, 40)">
+                        <circle cx="0" cy="0" r="12" class="actor-head"/>
+                        <line x1="0" y1="12" x2="0" y2="35" class="actor-body"/>
+                        <line x1="-15" y1="20" x2="15" y2="20" class="actor-body"/>
+                        <line x1="0" y1="35" x2="-12" y2="52" class="actor-body"/>
+                        <line x1="0" y1="35" x2="12" y2="52" class="actor-body"/>
+                        <text x="0" y="68" class="node-text">Customer</text>
+                    </g>
+                    <line x1="100" y1="115" x2="100" y2="1140" class="lifeline"/>
+
+                    <!-- 2. Frontend Node Top -->
+                    <g transform="translate(260, 40)">
+                        <rect x="-60" y="0" width="120" height="50" class="box-frontend"/>
+                        <text x="0" y="30" class="node-text">Frontend</text>
+                    </g>
+                    <line x1="260" y1="95" x2="260" y2="1140" class="lifeline"/>
+
+                    <!-- 3. PHP Backend Node Top -->
+                    <g transform="translate(520, 40)">
+                        <rect x="-60" y="0" width="120" height="50" class="box-backend"/>
+                        <text x="0" y="30" class="node-text">PHP Backend</text>
+                    </g>
+                    <line x1="520" y1="95" x2="520" y2="1140" class="lifeline"/>
+
+                    <!-- 4. Admin Actor Top -->
+                    <g transform="translate(780, 40)">
+                        <circle cx="0" cy="0" r="12" class="actor-head"/>
+                        <line x1="0" y1="12" x2="0" y2="35" class="actor-body"/>
+                        <line x1="-15" y1="20" x2="15" y2="20" class="actor-body"/>
+                        <line x1="0" y1="35" x2="-12" y2="52" class="actor-body"/>
+                        <line x1="0" y1="35" x2="12" y2="52" class="actor-body"/>
+                        <text x="0" y="68" class="node-text">Admin</text>
+                    </g>
+                    <line x1="780" y1="115" x2="780" y2="1140" class="lifeline"/>
+
+
+                    <!-- ==========================================
+                         MESSAGES & INTERACTIONS (STEPS 1-13)
+                    ========================================== -->
+
+                    <!-- Step 1: Customer -> Frontend -->
+                    <g>
+                        <text x="180" y="145" class="msg-text">1. Browse catalog or ask AI (e.g.,</text>
+                        <text x="180" y="160" class="msg-text">"Wedding outfit")</text>
+                        <line x1="100" y1="170" x2="260" y2="170" class="solid-msg"/>
+                    </g>
+
+                    <!-- Step 2: Frontend -> PHP Backend -->
+                    <g>
+                        <text x="390" y="205" class="msg-text">2. Query product details (MySQL)</text>
+                        <line x1="260" y1="215" x2="520" y2="215" class="solid-msg"/>
+                    </g>
+
+                    <!-- Step 3: PHP Backend -> Frontend (Return) -->
+                    <g>
+                        <text x="390" y="255" class="msg-text">3. return product info &amp; prices</text>
+                        <line x1="520" y1="265" x2="260" y2="265" class="dash-msg"/>
+                    </g>
+
+                    <!-- Step 4: Frontend -> Customer (Return) -->
+                    <g>
+                        <text x="180" y="300" class="msg-text">4. Display product cards &amp;</text>
+                        <text x="180" y="315" class="msg-text">&amp; AI styling tips</text>
+                        <line x1="260" y1="325" x2="100" y2="325" class="dash-msg"/>
+                    </g>
+
+                    <!-- Step 5: Customer -> Frontend -->
+                    <g>
+                        <text x="180" y="360" class="msg-text">5. Select size &amp; Click "Place Order"</text>
+                        <text x="180" y="375" class="msg-text">(or In-Chat Checkout)</text>
+                        <line x1="100" y1="385" x2="260" y2="385" class="solid-msg"/>
+                    </g>
+
+                    <!-- Step 6: Frontend -> PHP Backend -->
+                    <g>
+                        <text x="390" y="420" class="msg-text">6. Submit order status (POST request)</text>
+                        <line x1="260" y1="430" x2="520" y2="430" class="solid-msg"/>
+                    </g>
+
+                    <!-- Self Loop 7.1: PHP Backend Internal Validation -->
+                    <g>
+                        <text x="595" y="475" class="msg-text" text-anchor="start">7. Validate input, calculate total amount &amp; VAT</text>
+                        <path d="M 520,470 C 560,470 560,510 520,510" class="loop-path"/>
+                    </g>
+
+                    <!-- Self Loop 7.2: PHP Backend Insert into database -->
+                    <g>
+                        <text x="595" y="555" class="msg-text" text-anchor="start">7'. Insert record into 'orders' &amp; session tracking</text>
+                        <path d="M 520,550 C 560,550 560,590 520,590" class="loop-path"/>
+                    </g>
+
+                    <!-- Step 8: PHP Backend -> Frontend (Return) -->
+                    <g>
+                        <text x="390" y="625" class="msg-text">8. Return success response</text>
+                        <text x="390" y="640" class="msg-text">&amp; Order ID</text>
+                        <line x1="520" y1="650" x2="260" y2="650" class="dash-msg"/>
+                    </g>
+
+                    <!-- Step 9: Frontend -> Customer (Return) -->
+                    <g>
+                        <text x="180" y="685" class="msg-text">9. Display order confirmation &amp;</text>
+                        <text x="180" y="700" class="msg-text">Live tracking view</text>
+                        <line x1="260" y1="710" x2="100" y2="710" class="dash-msg"/>
+                    </g>
+
+                    <!-- Step 10: Admin -> PHP Backend -->
+                    <g>
+                        <text x="650" y="755" class="msg-text">Login to Admin Dashboard</text>
+                        <line x1="780" y1="765" x2="520" y2="765" class="solid-msg"/>
+                    </g>
+
+                    <!-- Self Loop 10.1: Fetch orders -->
+                    <g>
+                        <text x="595" y="805" class="msg-text" text-anchor="start">Fetch live order list from Database</text>
+                        <path d="M 520,800 C 560,800 560,840 520,840" class="loop-path"/>
+                    </g>
+
+                    <!-- Step 11: PHP Backend -> Admin (Return) -->
+                    <g>
+                        <text x="650" y="870" class="msg-text">Display pending &amp; active orders</text>
+                        <text x="650" y="885" class="msg-text">(Pending → Shipped / Delivered)</text>
+                        <line x1="520" y1="895" x2="780" y2="895" class="dash-msg"/>
+                    </g>
+
+                    <!-- Step 12: Admin -> PHP Backend -->
+                    <g>
+                        <text x="650" y="935" class="msg-text">Update order status (Pedingd / Delivered)</text>
+                        <line x1="780" y1="945" x2="520" y2="945" class="solid-msg"/>
+                    </g>
+
+                    <!-- Self Loop 12.1: Database update -->
+                    <g>
+                        <text x="595" y="985" class="msg-text" text-anchor="start">Update status in database</text>
+                        <path d="M 520,980 C 560,980 560,1020 520,1020" class="loop-path"/>
+                    </g>
+
+                    <!-- Step 13: PHP Backend -> Admin (Return) -->
+                    <g>
+                        <text x="650" y="1055" class="msg-text">Show status update success confirmation</text>
+                        <line x1="520" y1="1065" x2="780" y2="1065" class="dash-msg"/>
+                    </g>
+
+
+                    <!-- ==========================================
+                         BOTTOM NODES & CAPTION
+                    ========================================== -->
+
+                    <!-- 1. Customer Actor Bottom -->
+                    <g transform="translate(100, 1140)">
+                        <circle cx="0" cy="0" r="12" class="actor-head"/>
+                        <line x1="0" y1="12" x2="0" y2="35" class="actor-body"/>
+                        <line x1="-15" y1="20" x2="15" y2="20" class="actor-body"/>
+                        <line x1="0" y1="35" x2="-12" y2="52" class="actor-body"/>
+                        <line x1="0" y1="35" x2="12" y2="52" class="actor-body"/>
+                        <text x="0" y="68" class="node-text">Customer</text>
+                    </g>
+
+                    <!-- 2. Frontend Node Bottom -->
+                    <g transform="translate(260, 1140)">
+                        <rect x="-65" y="0" width="130" height="45" class="box-frontend"/>
+                        <text x="0" y="27" class="node-text" style="font-size: 13px;">Frontend / UX Concierge</text>
+                    </g>
+
+                    <!-- 3. PHP Backend Node Bottom -->
+                    <g transform="translate(520, 1140)">
+                        <rect x="-60" y="0" width="120" height="45" class="box-backend"/>
+                        <text x="0" y="27" class="node-text">PHP Backend</text>
+                    </g>
+
+                    <!-- 4. Admin Actor Bottom -->
+                    <g transform="translate(780, 1140)">
+                        <circle cx="0" cy="0" r="12" class="actor-head"/>
+                        <line x1="0" y1="12" x2="0" y2="35" class="actor-body"/>
+                        <line x1="-15" y1="20" x2="15" y2="20" class="actor-body"/>
+                        <line x1="0" y1="35" x2="-12" y2="52" class="actor-body"/>
+                        <line x1="0" y1="35" x2="12" y2="52" class="actor-body"/>
+                        <text x="0" y="68" class="node-text">Admin</text>
+                    </g>
+
+                    <!-- Figure Caption -->
+                    <text x="450" y="1255" class="caption-text">Figure 5.5: Sequence Diagram</text>
+                </svg>
