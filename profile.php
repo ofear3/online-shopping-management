@@ -8,6 +8,9 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+// ভাষা প্রথমে ডিক্লেয়ার করে নেওয়া হলো যাতে পোস্ট রিকোয়েস্টে ওয়ার্নিং না আসে
+$currentLang = $_SESSION['lang'] ?? 'en';
+
 // চেক করা ইউজার লগইন করা আছে কিনা
 if (!isset($_SESSION['user_id'])) {
     header('Location: /online-shopping-management/login.php');
@@ -94,13 +97,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $conn->commit();
 
-            // সেশন আপডেট করা যাতে হেডারে তাৎক্ষণিক পরিবর্তন দেখা যায়
+            // সেশন আপডেট করা যাতে হেডারে তাৎক্ষণিক পরিবর্তন দেখা যায়
             $_SESSION['user_name']     = $name;
             $_SESSION['user_nickname'] = $nickname;
             $_SESSION['user_gender']   = $gender;
             $_SESSION['user_image']    = $imagePath;
 
-            $successMessage = ($currentLang === 'bn') ? 'প্রোফাইল সফলভাবে আপডেট করা হয়েছে!' : 'Profile updated successfully!';
+            $successMessage = ($currentLang === 'bn') ? 'প্রোফাইল সফলভাবে আপডেট করা হয়েছে!' : 'Profile updated successfully!';
 
         } catch (Exception $e) {
             $conn->rollback();
@@ -121,7 +124,6 @@ $stmtData->execute();
 $userData = $stmtData->get_result()->fetch_assoc();
 $stmtData->close();
 
-$currentLang = $_SESSION['lang'] ?? 'en';
 require_once __DIR__ . '/includes/header.php';
 ?>
 

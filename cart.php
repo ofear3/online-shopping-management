@@ -12,7 +12,7 @@ require_once __DIR__ . '/config/db.php';
 
 $currentLang = $_SESSION['lang'] ?? 'en';
 
-// কার্ট ইনিশিয়ালাইজেশন
+// কার্ট ইনিশিয়ালাইজেশন
 if (!isset($_SESSION['cart']) || !is_array($_SESSION['cart'])) {
     $_SESSION['cart'] = [];
 }
@@ -94,8 +94,7 @@ foreach ($_SESSION['cart'] as $item) {
 }
 
 $shipping   = ($subtotal > 0) ? 100.00 : 0.00; // ১০০ টাকা শিপিং চার্জ
-$vat        = $subtotal * 0.05; // ৫% ভ্যাট
-$grandTotal = $subtotal > 0 ? ($subtotal + $shipping + $vat) : 0;
+$grandTotal = $subtotal > 0 ? ($subtotal + $shipping) : 0;
 
 require_once __DIR__ . '/includes/header.php';
 ?>
@@ -127,7 +126,7 @@ require_once __DIR__ . '/includes/header.php';
                 </div>
                 <div class="space-y-2">
                     <h2 class="text-xl sm:text-2xl font-black text-slate-900">
-                        <?= $currentLang === 'bn' ? 'আপনার কার্টটি খালি রয়েছে!' : 'Your Cart is Currently Empty!' ?>
+                        <?= $currentLang === 'bn' ? 'আপনার কার্টটি খালি রয়েছে!' : 'Your Cart is Currently Empty!' ?>
                     </h2>
                     <p class="text-xs sm:text-sm text-slate-500 leading-relaxed max-w-md mx-auto">
                         <?= $currentLang === 'bn' ? 'নোভেরা এক্সক্লুসিভ কালেকশন থেকে আপনার পছন্দের পোশাক কার্টে যোগ করুন।' : 'Explore our high-end luxury catalog and discover tailored apparel crafted just for you.' ?>
@@ -222,10 +221,6 @@ require_once __DIR__ . '/includes/header.php';
                                 <span><?= $currentLang === 'bn' ? 'শিপিং চার্জ' : 'Shipping Fee' ?></span>
                                 <span class="font-bold text-slate-900">৳<?= number_format($shipping, 0) ?></span>
                             </div>
-                            <div class="flex items-center justify-between text-slate-600">
-                                <span><?= $currentLang === 'bn' ? 'ভ্যাট (৫%)' : 'Estimated VAT (5%)' ?></span>
-                                <span class="font-bold text-slate-900">৳<?= number_format($vat, 0) ?></span>
-                            </div>
 
                             <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
                                 <span class="text-sm font-black text-slate-900"><?= $currentLang === 'bn' ? 'সর্বমোট' : 'Grand Total' ?></span>
@@ -236,7 +231,7 @@ require_once __DIR__ . '/includes/header.php';
                         <!-- Checkout Button -->
                         <div class="pt-2">
                             <a href="/online-shopping-management/checkout.php" class="w-full py-4 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white text-xs font-black rounded-2xl shadow-lg transition flex items-center justify-center gap-2 text-center block">
-                                <span><?= $currentLang === 'bn' ? 'চেকআউটে এগিয়ে যান' : 'Proceed to Checkout' ?></span>
+                                <span><?= $currentLang === 'bn' ? 'চেকআউটে এগিয়ে যান' : 'Proceed to Checkout' ?></span>
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
                             </a>
                         </div>

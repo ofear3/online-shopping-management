@@ -1,16 +1,15 @@
-
 <footer class="bg-gray-900 text-gray-300 mt-16">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
 
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10">
 
             <div>
-                <a href="index.php" class="flex items-center gap-2 text-2xl font-bold text-blue-500 mb-4">
+                <a href="index.php" class="flex items-center gap-2 text-2xl font-bold text-emerald-500 mb-4">
                     <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-1.5 7h13L17 13M9 20a1 1 0 100-2 1 1 0 000 2zm8 0a1 1 0 100-2 1 1 0 000 2z"/>
                     </svg>
-                    Smart<span class="text-white">Cart</span>
+                    Novera<span class="text-white">Shop</span>
                 </a>
 
                 <p class="text-sm leading-6 text-gray-400">
@@ -20,7 +19,7 @@
                 <div class="flex items-center gap-4 mt-6">
 
                     <a href="https://www.facebook.com/" target="_blank"
-                       class="w-10 h-10 flex items-center justify-center rounded-full bg-gray-800 hover:bg-blue-600 text-white transition"
+                       class="w-10 h-10 flex items-center justify-center rounded-full bg-gray-800 hover:bg-emerald-600 text-white transition"
                        aria-label="Facebook">
                         <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M13.5 22v-8h2.7l.4-3h-3.1V9.1c0-.9.3-1.6 1.7-1.6h1.5V4.8c-.3 0-1.3-.1-2.4-.1-2.4 0-4.1 1.5-4.1 4.2V11H7.5v3h2.7v8h3.3z"/>
@@ -62,7 +61,7 @@
                 <ul class="space-y-3">
 
                     <li>
-                        <a href="index.php" class="flex items-center gap-2 hover:text-blue-500 transition">
+                        <a href="index.php" class="flex items-center gap-2 hover:text-emerald-500 transition">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M3 10l9-7 9 7v10a2 2 0 01-2 2H5a2 2 0 01-2-2V10z"/>
@@ -72,7 +71,7 @@
                     </li>
 
                     <li>
-                        <a href="shop.php" class="flex items-center gap-2 hover:text-blue-500 transition">
+                        <a href="shop.php" class="flex items-center gap-2 hover:text-emerald-500 transition">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M3 3h18v18H3V3zm4 4h10v4H7V7z"/>
@@ -82,7 +81,7 @@
                     </li>
 
                     <li>
-                        <a href="categories.php" class="flex items-center gap-2 hover:text-blue-500 transition">
+                        <a href="categories.php" class="flex items-center gap-2 hover:text-emerald-500 transition">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 0h6v6h-6v-6z"/>
@@ -92,7 +91,7 @@
                     </li>
 
                     <li>
-                        <a href="offers.php" class="flex items-center gap-2 hover:text-blue-500 transition">
+                        <a href="sale.php" class="flex items-center gap-2 hover:text-emerald-500 transition">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M9 14l6-6m-5-4h6a2 2 0 012 2v6a2 2 0 01-.6 1.4l-5 5a2 2 0 01-2.8 0l-5-5a2 2 0 010-2.8l5-5A2 2 0 015 6v-2a2 2 0 012-2h3z"/>
@@ -110,7 +109,7 @@
                 <ul class="space-y-3">
 
                     <li>
-                        <a href="contact.php" class="flex items-center gap-2 hover:text-blue-500 transition">
+                        <a href="contact.php" class="flex items-center gap-2 hover:text-emerald-500 transition">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M3 5a2 2 0 012-2h3l2 5-2 2a16 16 0 007 7l2-2 5 2v3a2 2 0 01-2 2C10.3 22 2 13.7 2 3a2 2 0 011-2z"/>
@@ -120,7 +119,7 @@
                     </li>
 
                     <li>
-                        <a href="shipping.php" class="flex items-center gap-2 hover:text-blue-500 transition">
+                        <a href="shipping.php" class="flex items-center gap-2 hover:text-emerald-500 transition">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M3 7h11v10H3V7zm11 3h4l3 3v4h-7v-7zM7 20a2 2 0 100-4 2 2 0 000 4zm10 0a2 2 0 100-4 2 2 0 000 4z"/>
@@ -130,7 +129,7 @@
                     </li>
 
                     <li>
-                        <a href="return.php" class="flex items-center gap-2 hover:text-blue-500 transition">
+                        <a href="return.php" class="flex items-center gap-2 hover:text-emerald-500 transition">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M9 14l-4-4 4-4m-4 4h10a5 5 0 015 5v1"/>
@@ -140,7 +139,7 @@
                     </li>
 
                     <li>
-                        <a href="faq.php" class="flex items-center gap-2 hover:text-blue-500 transition">
+                        <a href="faq.php" class="flex items-center gap-2 hover:text-emerald-500 transition">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <circle cx="12" cy="12" r="9" stroke-width="2"/>
                                 <path stroke-linecap="round" stroke-width="2"
@@ -160,8 +159,8 @@
 
                     <a href="https://www.google.com/maps/search/Dhaka+Bangladesh"
                        target="_blank"
-                       class="flex items-start gap-3 hover:text-blue-500 transition">
-                        <svg class="w-5 h-5 text-blue-500 mt-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                       class="flex items-start gap-3 hover:text-emerald-500 transition">
+                        <svg class="w-5 h-5 text-emerald-500 mt-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M12 21s7-5.2 7-11a7 7 0 10-14 0c0 5.8 7 11 7 11z"/>
                             <circle cx="12" cy="10" r="2.5"/>
@@ -170,21 +169,21 @@
                     </a>
 
                     <a href="tel:+8801234567890"
-                       class="flex items-center gap-3 hover:text-blue-500 transition">
-                        <svg class="w-5 h-5 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                       class="flex items-center gap-3 hover:text-emerald-500 transition">
+                        <svg class="w-5 h-5 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M3 5a2 2 0 012-2h3l2 5-2 2a16 16 0 007 7l2-2 5 2v3a2 2 0 01-2 2C10.3 22 2 13.7 2 3a2 2 0 011-2z"/>
                         </svg>
                         <span>+880 1234-567890</span>
                     </a>
 
-                    <a href="mailto:support@smartcart.com"
-                       class="flex items-center gap-3 hover:text-blue-500 transition break-all">
-                        <svg class="w-5 h-5 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <a href="mailto:support@novera.com"
+                       class="flex items-center gap-3 hover:text-emerald-500 transition break-all">
+                        <svg class="w-5 h-5 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M3 6h18v12H3V6zm0 0l9 7 9-7"/>
                         </svg>
-                        <span>support@smartcart.com</span>
+                        <span>support@novera.com</span>
                     </a>
 
                     <div class="flex items-center gap-2 pt-2">
@@ -201,11 +200,11 @@
         </div>
 
         <div class="border-t border-gray-800 mt-10 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-gray-500">
-            <p>© 2026 SmartCart. All Rights Reserved.</p>
+            <p>© 2026 NoveraShop. All Rights Reserved.</p>
 
             <div class="flex gap-5">
-                <a href="privacy.php" class="hover:text-blue-500 transition">Privacy Policy</a>
-                <a href="terms.php" class="hover:text-blue-500 transition">Terms & Conditions</a>
+                <a href="privacy.php" class="hover:text-emerald-500 transition">Privacy Policy</a>
+                <a href="terms.php" class="hover:text-emerald-500 transition">Terms & Conditions</a>
             </div>
         </div>
 

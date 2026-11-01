@@ -23,13 +23,13 @@ if (isset($_SESSION['order_placed_success'])) {
     unset($_SESSION['placed_order_id']);
 }
 
-// কার্ট খালি থাকলে এবং পপআপ না দেখানোর থাকলে কার্ট পেজে রিডাইরেক্ট
+// কার্ট খালি থাকলে এবং সাকসেস পপআপ না থাকলে কার্ট পেজে রিডাইরেক্ট
 if (!$showSuccessPopup && (empty($_SESSION['cart']) || !is_array($_SESSION['cart']))) {
     header("Location: /online-shopping-management/cart.php");
     exit;
 }
 
-// ২. হিসাব-নিকাশ
+// ২. হিসাব-নিকাশ (ভ্যাট বাদ দিয়ে সঠিক সাবটোটাল ও শিপিং)
 $subtotal = 0;
 if (!empty($_SESSION['cart']) && is_array($_SESSION['cart'])) {
     foreach ($_SESSION['cart'] as $item) {
@@ -37,21 +37,18 @@ if (!empty($_SESSION['cart']) && is_array($_SESSION['cart'])) {
     }
 }
 
-$shipping = ($subtotal > 0) ? 100.00 : 0.00;
-$vat = $subtotal * 0.05;
-$grandTotal = $subtotal + $shipping + $vat;
+$shipping   = ($subtotal > 0) ? 100.00 : 0.00;
+$grandTotal = $subtotal + $shipping;
 
-$errors = [];
-$fullname = $_SESSION['user_name'] ?? '';
-$email = $_SESSION['user_email'] ?? '';
-$phone = '';
-$address = '';
+$errors        = [];
+$phone         = '';
+$address       = '';
 $paymentMethod = 'cod';
 
 // ৩. অর্ডার সাবমিশন হ্যান্ডলিং (POST Response)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $phone = trim($_POST['phone'] ?? '');
-    $address = trim($_POST['address'] ?? '');
+    $phone         = trim($_POST['phone'] ?? '');
+    $address       = trim($_POST['address'] ?? '');
     $paymentMethod = trim($_POST['payment_method'] ?? 'cod');
 
     if (empty($phone)) {
@@ -62,33 +59,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors)) {
-        // ইউজার লগইন করা না থাকলে গেস্ট হিসেবে NULL অথবা 0 হ্যান্ডেল করা বা লগইন পেজে পাঠানো
-        $userId = isset($_SESSION['user_id']) && !empty($_SESSION['user_id']) ? (int) $_SESSION['user_id'] : null;
-        $status = 'pending';
+        // ফরেইন কি এরর এড়াতে ইউজার আইডি ভ্যালিডেশন
+        $userId = null;
+        if (isset($_SESSION['user_id']) && !empty($_SESSION['user_id'])) {
+            $chkUser = $conn->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
+            $chkUser->bind_param("i", $_SESSION['user_id']);
+            $chkUser->execute();
+            $resUser = $chkUser->get_result();
+            if ($resUser->num_rows > 0) {
+                $userId = (int) $_SESSION['user_id'];
+            }
+            $chkUser->close();
+        }
 
+        $status = 'pending';
         $stmt = $conn->prepare("INSERT INTO orders (user_id, total_amount, status, shipping_address, phone, payment_method, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())");
 
         if ($stmt) {
-            // যদি user_id null হয় তবে bind_param এ 'i'-এর বদলে টাইপ হ্যান্ডলিং বা null পাঠানো একটু সতর্কতার সাথে করতে হয়
-            // অথবা ডাটাবেজে ইউজার টেবিলে একটি Default 'Guest' ইউজার (id = 1 বা অন্য কিছু) রেখে সেটি ব্যবহার করতে পারেন।
-            
-            $stmt->bind_param("idssss", $userId, $grandTotal, $status, $address, $phone, $paymentMethod);
-            $stmt->execute();
-            $newOrderId = $stmt->insert_id;
-            $stmt->close();
-
-            $_SESSION['order_placed_success'] = true;
-            $_SESSION['placed_order_id'] = $newOrderId;
-
-            if (!isset($_SESSION['my_order_ids'])) {
-                $_SESSION['my_order_ids'] = [];
+            // যদি user_id null হয় তবে bind_param এ integer বা null হ্যান্ডেল করার জন্য
+            if ($userId === null) {
+                $nullVar = null;
+                // ডাইনামিক টাইপ বাইন্ডিংয়ের বিকল্প হিসেবে সরাসরি এক্সিকিউট বা সেফ স্টেটমেন্ট
+                $stmt->bind_param("idssss", $nullVar, $grandTotal, $status, $address, $phone, $paymentMethod);
+            } else {
+                $stmt->bind_param("idssss", $userId, $grandTotal, $status, $address, $phone, $paymentMethod);
             }
-            $_SESSION['my_order_ids'][] = $newOrderId;
 
-            unset($_SESSION['cart']);
+            if ($stmt->execute()) {
+                $newOrderId = $stmt->insert_id;
+                $stmt->close();
 
-            header("Location: /online-shopping-management/checkout.php");
-            exit;
+                $_SESSION['order_placed_success'] = true;
+                $_SESSION['placed_order_id']    = $newOrderId;
+
+                if (!isset($_SESSION['my_order_ids'])) {
+                    $_SESSION['my_order_ids'] = [];
+                }
+                $_SESSION['my_order_ids'][] = $newOrderId;
+
+                unset($_SESSION['cart']);
+
+                header("Location: /online-shopping-management/checkout.php");
+                exit;
+            } else {
+                $errors[] = "Database Insert Error: " . $stmt->error;
+                $stmt->close();
+            }
         }
     }
 }
@@ -110,7 +126,7 @@ require_once __DIR__ . '/includes/header.php';
             </div>
             <a href="/online-shopping-management/cart.php" class="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-2xl border border-white/20 transition flex items-center gap-2">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
                 </svg>
                 <span><?= $currentLang === 'bn' ? 'কার্টে ফিরে যান' : 'Back to Cart' ?></span>
             </a>
@@ -121,7 +137,7 @@ require_once __DIR__ . '/includes/header.php';
                 <?php foreach ($errors as $err): ?>
                     <p class="flex items-center gap-2 font-medium">
                         <svg class="w-4 h-4 text-rose-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                         </svg>
                         <?= e($err) ?>
                     </p>
@@ -172,9 +188,7 @@ require_once __DIR__ . '/includes/header.php';
                             <input type="radio" name="pm_radio" value="cod" checked class="peer sr-only">
                             <div class="p-3.5 sm:p-4 rounded-2xl border-2 border-slate-200 peer-checked:border-emerald-600 peer-checked:bg-emerald-50/50 transition flex flex-col items-center justify-center gap-2 text-center h-full">
                                 <svg class="w-7 h-7 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
                                 </svg>
                                 <span class="text-xs font-black text-slate-900 leading-tight">Cash on Delivery</span>
                             </div>
@@ -184,7 +198,9 @@ require_once __DIR__ . '/includes/header.php';
                         <label class="cursor-pointer payment-option-label" data-method="bkash">
                             <input type="radio" name="pm_radio" value="bkash" class="peer sr-only">
                             <div class="p-3.5 sm:p-4 rounded-2xl border-2 border-slate-200 peer-checked:border-[#E2136E] peer-checked:bg-pink-50/50 transition flex flex-col items-center justify-center gap-2 text-center h-full">
-                                <div class="w-7 h-7 rounded-full bg-[#E2136E] text-white flex items-center justify-center font-black text-xs shadow-md">bK</div>
+                                <div class="w-8 h-8 rounded-xl bg-white shadow-sm border border-slate-100 flex items-center justify-center overflow-hidden p-1">
+                                    <img src="/online-shopping-management/includes/bkash.png" alt="bKash" class="w-full h-full object-contain">
+                                </div>
                                 <span class="text-xs font-black text-slate-900 leading-tight">bKash</span>
                             </div>
                         </label>
@@ -193,7 +209,9 @@ require_once __DIR__ . '/includes/header.php';
                         <label class="cursor-pointer payment-option-label" data-method="rocket">
                             <input type="radio" name="pm_radio" value="rocket" class="peer sr-only">
                             <div class="p-3.5 sm:p-4 rounded-2xl border-2 border-slate-200 peer-checked:border-[#8C3494] peer-checked:bg-purple-50/50 transition flex flex-col items-center justify-center gap-2 text-center h-full">
-                                <div class="w-7 h-7 rounded-full bg-[#8C3494] text-white flex items-center justify-center font-black text-xs shadow-md">🚀</div>
+                                <div class="w-8 h-8 rounded-xl bg-white shadow-sm border border-slate-100 flex items-center justify-center overflow-hidden p-1">
+                                    <img src="/online-shopping-management/includes/rocket.png" alt="Rocket" class="w-full h-full object-contain">
+                                </div>
                                 <span class="text-xs font-black text-slate-900 leading-tight">Rocket</span>
                             </div>
                         </label>
@@ -203,7 +221,7 @@ require_once __DIR__ . '/includes/header.php';
                             <input type="radio" name="pm_radio" value="card" class="peer sr-only">
                             <div class="p-3.5 sm:p-4 rounded-2xl border-2 border-slate-200 peer-checked:border-indigo-600 peer-checked:bg-indigo-50/50 transition flex flex-col items-center justify-center gap-2 text-center h-full">
                                 <svg class="w-7 h-7 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                                 </svg>
                                 <span class="text-xs font-black text-slate-900 leading-tight">Card Payment</span>
                             </div>
@@ -253,10 +271,6 @@ require_once __DIR__ . '/includes/header.php';
                             <span><?= $currentLang === 'bn' ? 'ডেলিভারি চার্জ' : 'Shipping Fee' ?></span>
                             <span class="font-bold text-slate-900">৳<?= number_format($shipping, 0) ?></span>
                         </div>
-                        <div class="flex items-center justify-between text-slate-600">
-                            <span><?= $currentLang === 'bn' ? 'ভ্যাট (৫%)' : 'VAT (5%)' ?></span>
-                            <span class="font-bold text-slate-900">৳<?= number_format($vat, 0) ?></span>
-                        </div>
 
                         <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
                             <span class="text-sm font-black text-slate-900"><?= $currentLang === 'bn' ? 'সর্বমোট প্রদেয়' : 'Total Payable' ?></span>
@@ -268,7 +282,7 @@ require_once __DIR__ . '/includes/header.php';
                     <div class="pt-2">
                         <button type="button" id="placeOrderBtn" class="w-full py-4 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white text-xs font-black rounded-2xl shadow-xl transition flex items-center justify-center gap-2 cursor-pointer">
                             <svg class="w-5 h-5 text-emerald-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                             </svg>
                             <span id="submitBtnText"><?= $currentLang === 'bn' ? 'অর্ডার নিশ্চিত করুন' : 'Confirm & Place Order' ?></span>
                         </button>
@@ -286,12 +300,14 @@ require_once __DIR__ . '/includes/header.php';
         <!-- Gateway Header -->
         <div id="gatewayHeaderBg" class="bg-[#E2136E] text-white p-5 text-center relative">
             <button type="button" id="closeGateway" class="absolute top-4 right-4 text-white/80 hover:text-white text-sm font-bold bg-white/10 w-8 h-8 rounded-full flex items-center justify-center">✕</button>
-            <div id="gatewayLogoBox" class="w-12 h-12 bg-white text-[#E2136E] rounded-2xl mx-auto flex items-center justify-center font-black text-base shadow-md mb-2">bK</div>
+            <div id="gatewayLogoBox" class="w-12 h-12 bg-white rounded-2xl mx-auto flex items-center justify-center shadow-md mb-2 overflow-hidden p-1.5">
+                <img id="gatewayHeaderImg" src="/online-shopping-management/includes/bkash.png" alt="Logo" class="w-full h-full object-contain">
+            </div>
             <h3 id="gatewayTitle" class="text-sm font-bold tracking-wide">bKash Payment Gateway</h3>
             <p class="text-[11px] text-white/80 mt-0.5">Novera Online Shop</p>
         </div>
 
-        <!-- Inline Error Message Box (Replaced alert) -->
+        <!-- Inline Error Message Box -->
         <div id="gatewayErrorBox" class="hidden mx-6 mt-4 p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-bold rounded-xl text-center"></div>
 
         <!-- Step 1: Phone Number Input -->
@@ -354,7 +370,7 @@ require_once __DIR__ . '/includes/header.php';
         <div class="bg-white w-full max-w-md p-6 sm:p-8 rounded-3xl shadow-2xl border border-slate-100 text-center space-y-5 animate-in fade-in zoom-in duration-300">
             <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
                 <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
                 </svg>
             </div>
             <div class="space-y-2">
@@ -394,7 +410,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const gatewayCard = document.getElementById('gatewayCard');
     const closeGateway = document.getElementById('closeGateway');
     const gatewayHeaderBg = document.getElementById('gatewayHeaderBg');
-    const gatewayLogoBox = document.getElementById('gatewayLogoBox');
+    const gatewayHeaderImg = document.getElementById('gatewayHeaderImg');
     const gatewayTitle = document.getElementById('gatewayTitle');
     const gatewayDisplayAmount = document.getElementById('gatewayDisplayAmount');
     const gatewayNumberLabel = document.getElementById('gatewayNumberLabel');
@@ -454,31 +470,32 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        // Configure Gateway theme based on method
+        // Configure Gateway theme based on method (সঠিক অ্যামাউন্ট পাস করা হচ্ছে)
         gatewayDisplayAmount.innerText = formattedAmount;
         pinDisplayAmount.innerText = formattedAmount;
-        
-        // Keep input field blank with placeholder as requested
         gatewayPhoneInput.value = '';
 
         if (method === 'bkash') {
             gatewayHeaderBg.className = "bg-[#E2136E] text-white p-5 text-center relative";
-            gatewayLogoBox.className = "w-12 h-12 bg-white text-[#E2136E] rounded-2xl mx-auto flex items-center justify-center font-black text-base shadow-md mb-2";
-            gatewayLogoBox.innerText = "bK";
+            gatewayHeaderImg.src = "/online-shopping-management/includes/bkash.png";
             gatewayTitle.innerText = "bKash Payment Gateway";
             gatewayNumberLabel.innerText = "Your bKash Account Number";
+            gatewayNextBtn.style.backgroundColor = "#E2136E";
+            gatewayVerifyOtpBtn.style.backgroundColor = "#E2136E";
         } else if (method === 'rocket') {
             gatewayHeaderBg.className = "bg-[#8C3494] text-white p-5 text-center relative";
-            gatewayLogoBox.className = "w-12 h-12 bg-white text-[#8C3494] rounded-2xl mx-auto flex items-center justify-center font-black text-xs shadow-md mb-2";
-            gatewayLogoBox.innerText = "🚀";
+            gatewayHeaderImg.src = "/online-shopping-management/includes/rocket.png";
             gatewayTitle.innerText = "Rocket Payment Gateway";
             gatewayNumberLabel.innerText = "Your Rocket Account Number";
+            gatewayNextBtn.style.backgroundColor = "#8C3494";
+            gatewayVerifyOtpBtn.style.backgroundColor = "#8C3494";
         } else if (method === 'card') {
             gatewayHeaderBg.className = "bg-indigo-600 text-white p-5 text-center relative";
-            gatewayLogoBox.className = "w-12 h-12 bg-white text-indigo-600 rounded-2xl mx-auto flex items-center justify-center font-black text-xs shadow-md mb-2";
-            gatewayLogoBox.innerText = "💳";
+            gatewayHeaderImg.src = "/online-shopping-management/includes/bkash.png";
             gatewayTitle.innerText = "Secure Card Gateway";
             gatewayNumberLabel.innerText = "Card Mobile / Account Number";
+            gatewayNextBtn.style.backgroundColor = "#4F46E5";
+            gatewayVerifyOtpBtn.style.backgroundColor = "#4F46E5";
         }
 
         // Reset steps & clear inputs
@@ -524,7 +541,7 @@ document.addEventListener('DOMContentLoaded', function() {
     gatewayVerifyOtpBtn.addEventListener('click', function() {
         const otp = gatewayOtpInput.value.trim();
         if (otp.length < 4) {
-            showModalError('Please enter the 4-digit demo OTP (e.g. 1234)');
+            showModalError('Please enter a valid 4-digit OTP.');
             gatewayOtpInput.focus();
             return;
         }
@@ -533,23 +550,18 @@ document.addEventListener('DOMContentLoaded', function() {
         gatewayPinInput.focus();
     });
 
-    // Step 3 -> Final Form Submit
+    // Step 3 -> Final Form Submit on Confirm PIN
     gatewayConfirmBtn.addEventListener('click', function() {
         const pin = gatewayPinInput.value.trim();
         if (pin.length < 4) {
-            showModalError('Please enter your PIN.');
+            showModalError('Please enter your valid PIN.');
             gatewayPinInput.focus();
             return;
         }
 
-        // Show processing state
-        gatewayConfirmBtn.disabled = true;
-        gatewayConfirmBtn.innerHTML = `<span>Processing Payment...</span>`;
-
-        setTimeout(() => {
-            // Automatically submit the main form to save order in database & trigger success popup
-            document.getElementById('checkoutForm').submit();
-        }, 800);
+        // Close modal and submit main form
+        gatewayModal.classList.add('hidden');
+        document.getElementById('checkoutForm').submit();
     });
 });
 </script>
