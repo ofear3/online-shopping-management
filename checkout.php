@@ -491,7 +491,7 @@ document.addEventListener('DOMContentLoaded', function() {
             gatewayVerifyOtpBtn.style.backgroundColor = "#8C3494";
         } else if (method === 'card') {
             gatewayHeaderBg.className = "bg-indigo-600 text-white p-5 text-center relative";
-            gatewayHeaderImg.src = "/online-shopping-management/includes/bkash.png";
+            gatewayHeaderImg.src = "/online-shopping-management/includes/visa.png";
             gatewayTitle.innerText = "Secure Card Gateway";
             gatewayNumberLabel.innerText = "Card Mobile / Account Number";
             gatewayNextBtn.style.backgroundColor = "#4F46E5";

@@ -33,6 +33,8 @@ if (!$product) {
 $price = (float) ($product['price'] ?? 0);
 $discountPercent = (float) ($product['discount_percent'] ?? 0);
 $hasDiscount = ($discountPercent > 0);
+
+// সঠিক ডিসকাউন্ট প্রাইস ক্যালকুলেশন
 $finalPrice = $hasDiscount ? ($price - ($price * ($discountPercent / 100))) : $price;
 
 $categoryName = strtolower($product['category_name'] ?? $product['category'] ?? '');
@@ -41,37 +43,45 @@ require_once __DIR__ . '/includes/header.php';
 ?>
 
 <div class="min-h-[85vh] py-6 sm:py-12 px-3 sm:px-6 lg:px-8 bg-slate-50/50 flex items-center justify-center">
-    <div
-        class="max-w-5xl w-full bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-xl overflow-hidden p-5 sm:p-10">
+    <div class="max-w-5xl w-full bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-xl overflow-hidden p-5 sm:p-10">
 
         <!-- Breadcrumb -->
-        <nav
-            class="mb-5 text-[11px] sm:text-xs font-bold text-slate-400 flex items-center gap-1.5 overflow-x-auto whitespace-nowrap pb-1">
+        <nav class="mb-5 text-[11px] sm:text-xs font-bold text-slate-400 flex items-center gap-1.5 overflow-x-auto whitespace-nowrap pb-1">
             <a href="/online-shopping-management/index.php" class="hover:text-slate-800 transition">Home</a>
             <span>/</span>
             <a href="/online-shopping-management/shop.php" class="hover:text-slate-800 transition">Shop</a>
             <span>/</span>
-            <span
-                class="text-emerald-600 uppercase"><?= e($product['category_name'] ?? $product['category'] ?? 'Product') ?></span>
+            <span class="text-emerald-600 uppercase"><?= htmlspecialchars($product['category_name'] ?? $product['category'] ?? 'Product', ENT_QUOTES, 'UTF-8') ?></span>
         </nav>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-10 items-start">
 
-            <!-- Left: Product Image Showcase -->
-            <div
-                class="relative h-80 sm:h-[420px] md:h-[450px] bg-slate-100 rounded-2xl sm:rounded-3xl overflow-hidden shadow-inner border border-slate-100">
-                <?php if (!empty($product['image'])): ?>
-                    <img src="/online-shopping-management/<?= e($product['image']) ?>" alt="<?= e($product['name']) ?>"
-                        class="w-full h-full object-cover">
+            <!-- Left: Product Image Showcase (Fixed for Landscape/Portrait without cutting) -->
+            <div class="relative h-[420px] sm:h-[480px] md:h-[520px] bg-slate-900/5 rounded-2xl sm:rounded-3xl overflow-hidden shadow-inner border border-slate-100 flex items-center justify-center p-4">
+                <?php 
+                $rawImage = trim($product['image'] ?? '');
+                $rawImage = ltrim($rawImage, '/');
+                $rawImage = preg_replace('/^(\.\.\/)+/', '', $rawImage);
+                
+                // ফোল্ডার নাম ক্লিন করে সঠিক প্রজেক্ট পাথ তৈরি করা হলো
+                $cleanedImage = str_replace(['online-shopping-management/', 'aatpoure/'], '', $rawImage);
+                $imagePath = !empty($rawImage) ? '/online-shopping-management/' . ltrim($cleanedImage, '/') : '';
+                
+                // লোকাল সার্ভারে ফাইল চেক করার জন্য সঠিক রুট পাথ
+                $fullServerPath = $_SERVER['DOCUMENT_ROOT'] . '/online-shopping-management/' . ltrim($cleanedImage, '/');
+                
+                if (!empty($rawImage) && file_exists($fullServerPath)): 
+                ?>
+                    <img src="<?= htmlspecialchars($imagePath, ENT_QUOTES, 'UTF-8') ?>" alt="<?= htmlspecialchars($product['name'], ENT_QUOTES, 'UTF-8') ?>"
+                        class="w-full h-full object-contain object-center drop-shadow-md">
                 <?php else: ?>
                     <div class="w-full h-full flex items-center justify-center text-slate-400 font-bold text-xs uppercase">
-                        NOVERA Luxury
+                        Novera Luxury
                     </div>
                 <?php endif; ?>
 
                 <?php if ($hasDiscount): ?>
-                    <span
-                        class="absolute top-4 right-4 px-3 py-1.5 bg-rose-600 text-white text-xs font-black rounded-xl shadow-md animate-pulse">
+                    <span class="absolute top-4 right-4 px-3 py-1.5 bg-rose-600 text-white text-xs font-black rounded-xl shadow-md animate-pulse z-10">
                         -<?= round($discountPercent) ?><?= $currentLang === 'bn' ? '% ছাড়' : '% OFF' ?>
                     </span>
                 <?php endif; ?>
@@ -81,66 +91,64 @@ require_once __DIR__ . '/includes/header.php';
             <div class="space-y-5 sm:space-y-6 flex flex-col justify-between">
 
                 <div class="space-y-3">
-                    <span
-                        class="px-3 py-1 bg-slate-100 text-slate-700 font-bold text-[10px] rounded-lg uppercase tracking-wider inline-block">
-                        <?= e($product['category_name'] ?? $product['category'] ?? 'Luxury Apparel') ?>
+                    <span class="px-3 py-1 bg-slate-100 text-slate-700 font-bold text-[10px] rounded-lg uppercase tracking-wider inline-block">
+                        <?= htmlspecialchars($product['category_name'] ?? $product['category'] ?? 'Luxury Apparel', ENT_QUOTES, 'UTF-8') ?>
                     </span>
                     <h1 class="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 tracking-tight leading-snug">
-                        <?= e($product['name']) ?>
+                        <?= htmlspecialchars($product['name'], ENT_QUOTES, 'UTF-8') ?>
                     </h1>
 
                     <!-- Price (BDT ৳) -->
                     <div class="flex items-center gap-3 pt-1">
                         <?php if ($hasDiscount): ?>
-                            <span
-                                class="text-2xl sm:text-3xl font-black text-rose-600">৳<?= number_format($finalPrice, 0) ?></span>
-                            <span
-                                class="text-sm sm:text-base font-semibold text-slate-400 line-through">৳<?= number_format($price, 0) ?></span>
+                            <span class="text-2xl sm:text-3xl font-black text-rose-600">৳<?= number_format($finalPrice, 0) ?></span>
+                            <span class="text-sm sm:text-base font-semibold text-slate-400 line-through">৳<?= number_format($price, 0) ?></span>
                         <?php else: ?>
-                            <span
-                                class="text-2xl sm:text-3xl font-black text-slate-900">৳<?= number_format($price, 0) ?></span>
+                            <span class="text-2xl sm:text-3xl font-black text-slate-900">৳<?= number_format($price, 0) ?></span>
                         <?php endif; ?>
                     </div>
 
                     <p class="text-xs sm:text-sm text-slate-600 leading-relaxed pt-2 border-t border-slate-100">
-                        <?= e($product['description'] ?? 'No description available for this luxury apparel item.') ?>
+                        <?= htmlspecialchars($product['description'] ?? 'No description available for this luxury apparel item.', ENT_QUOTES, 'UTF-8') ?>
                     </p>
                 </div>
 
-                <!-- Add to Cart Form (Redirects to cart.php as requested) -->
-                <!-- Add to Cart Form -->
-                <form action="/online-shopping-management/cart.php" method="POST"
-                    class="space-y-5 pt-4 border-t border-slate-100">
+                <!-- Add to Cart Form (Pointing to /online-shopping-management/cart.php) -->
+                <form action="/online-shopping-management/cart.php" method="POST" class="space-y-5 pt-4 border-t border-slate-100">
                     <input type="hidden" name="action" value="add">
-                    <input type="hidden" name="product_id" value="<?= e((string) $product['id']) ?>">
+                    <input type="hidden" name="product_id" value="<?= htmlspecialchars((string) $product['id'], ENT_QUOTES, 'UTF-8') ?>">
 
-                    <!-- Size Selection -->
-                    <div class="space-y-2">
-                        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                            <?= $currentLang === 'bn' ? 'সাইজ নির্বাচন করুন' : 'Select Size' ?>
-                        </label>
-                        <div class="flex flex-wrap items-center gap-2.5">
-                            <?php
-                            $sizes = ['S', 'M', 'L', 'XL', 'XXL'];
-                            if (strpos($categoryName, 'kid') !== false) {
-                                $sizes = ['2-3Y', '4-5Y', '6-7Y', '8-9Y'];
-                            } elseif (strpos($categoryName, 'acc') !== false || strpos($categoryName, 'shoe') !== false) {
-                                $sizes = ['Standard', 'Free Size'];
-                            }
+                    <!-- Size Selection (Completely Hidden for Women Category) -->
+                    <?php 
+                    $isWomenCategory = (strpos($categoryName, 'women') !== false || strpos($categoryName, 'lady') !== false || strpos($categoryName, 'female') !== false || strpos($categoryName, 'girls') !== false);
+                    if (!$isWomenCategory): 
+                    ?>
+                        <div class="space-y-2">
+                            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                <?= $currentLang === 'bn' ? 'সাইজ নির্বাচন করুন' : 'Select Size' ?>
+                            </label>
+                            <div class="flex flex-wrap items-center gap-2.5">
+                                <?php
+                                $sizes = ['S', 'M', 'L', 'XL', 'XXL'];
+                                if (strpos($categoryName, 'kid') !== false || strpos($categoryName, 'child') !== false) {
+                                    $sizes = ['2-3Y', '4-5Y', '6-7Y', '8-9Y'];
+                                } elseif (strpos($categoryName, 'acc') !== false || strpos($categoryName, 'shoe') !== false) {
+                                    $sizes = ['Standard', 'Free Size'];
+                                }
 
-                            foreach ($sizes as $index => $size):
-                                ?>
-                                <label class="cursor-pointer">
-                                    <input type="radio" name="size" value="<?= $size ?>" <?= $index === 1 ? 'checked' : '' ?>
-                                        class="peer sr-only">
-                                    <div
-                                        class="px-4 py-2.5 rounded-xl border-2 border-slate-200 flex items-center justify-center text-xs font-bold text-slate-700 peer-checked:border-emerald-600 peer-checked:bg-emerald-50 peer-checked:text-emerald-700 transition">
-                                        <?= $size ?>
-                                    </div>
-                                </label>
-                            <?php endforeach; ?>
+                                foreach ($sizes as $index => $size):
+                                    ?>
+                                    <label class="cursor-pointer">
+                                        <input type="radio" name="size" value="<?= htmlspecialchars($size, ENT_QUOTES, 'UTF-8') ?>" <?= $index === 1 ? 'checked' : '' ?>
+                                            class="peer sr-only">
+                                        <div class="px-4 py-2.5 rounded-xl border-2 border-slate-200 flex items-center justify-center text-xs font-bold text-slate-700 peer-checked:border-emerald-600 peer-checked:bg-emerald-50 peer-checked:text-emerald-700 transition">
+                                            <?= htmlspecialchars($size, ENT_QUOTES, 'UTF-8') ?>
+                                        </div>
+                                    </label>
+                                <?php endforeach; ?>
+                            </div>
                         </div>
-                    </div>
+                    <?php endif; ?>
 
                     <!-- Quantity -->
                     <div class="space-y-2">

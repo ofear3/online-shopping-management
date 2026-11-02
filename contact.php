@@ -26,7 +26,7 @@ $email   = $_SESSION['user_email'] ?? '';
 $subject = '';
 $message = '';
 
-// ২. ফর্ম সাবমিশন প্রসেসিং
+// ২. ফর্ম সাবমিশন প্রসেসিং ও ডাটাবেজ সেভ
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name    = trim($_POST['name'] ?? '');
     $email   = trim($_POST['email'] ?? '');
@@ -47,9 +47,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors)) {
-        $_SESSION['contact_success'] = true;
-        header("Location: contact.php");
-        exit;
+        // user_messages টেবিলে ডাটা সেভ করার জন্য Prepared Statement
+        $stmt = $conn->prepare("INSERT INTO user_messages (name, email, subject, message, created_at) VALUES (?, ?, ?, ?, NOW())");
+        if ($stmt) {
+            $stmt->bind_param("ssss", $name, $email, $subject, $message);
+            if ($stmt->execute()) {
+                $stmt->close();
+                $_SESSION['contact_success'] = true;
+                header("Location: contact.php");
+                exit;
+            } else {
+                $errors[] = "Database Insert Error: " . $stmt->error;
+                $stmt->close();
+            }
+        } else {
+            $errors[] = "Database Prepare Error: " . $conn->error;
+        }
     }
 }
 
@@ -170,7 +183,7 @@ require_once __DIR__ . '/includes/header.php';
         <!-- 2 Column Responsive Grid Section -->
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-stretch">
             
-            <!-- Left Column: Support Channels & Google Map (12 on mobile, 6 on desktop) -->
+            <!-- Left Column: Support Channels & Google Map -->
             <div class="lg:col-span-6 space-y-6 flex flex-col justify-between">
                 <div class="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 md:p-8 border border-slate-200/80 shadow-xs space-y-6 h-full flex flex-col justify-between">
                     <div>
@@ -213,7 +226,7 @@ require_once __DIR__ . '/includes/header.php';
                             </div>
                         </div>
 
-                        <!-- Google Map Embed (Rapa Plaza, Dhanmondi 27) -->
+                        <!-- Google Map Embed -->
                         <div class="mt-5 rounded-2xl overflow-hidden border border-slate-200/80 shadow-inner h-48 sm:h-56 relative">
                             <iframe 
                                 src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3651.902347963283!2d90.37084917680197!3d23.750965389653775!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3755bfb6c9b36b2f%3A0x6b1076b1f09cbb58!2sRapa%20Plaza%2C%20Dhaka%201209!5e0!3m2!1sen!2sbd!4v1700000000000!5m2!1sen!2sbd" 
@@ -231,7 +244,7 @@ require_once __DIR__ . '/includes/header.php';
                 </div>
             </div>
 
-            <!-- Right Column: Form with Responsive Carrier Pigeon Animation (6 Cols) -->
+            <!-- Right Column: Form with Carrier Pigeon Animation -->
             <div class="lg:col-span-6">
                 <div class="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 md:p-8 border border-slate-200/80 shadow-xl shadow-slate-200/30 space-y-4 sm:space-y-5 relative overflow-hidden">
                     <div>
@@ -289,7 +302,7 @@ require_once __DIR__ . '/includes/header.php';
                                       class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-800 focus:outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition"><?= e($message) ?></textarea>
                         </div>
 
-                        <!-- Carrier Pigeon Animation Stage Container (Mobile Optimized) -->
+                        <!-- Carrier Pigeon Animation Stage Container -->
                         <div class="relative min-h-[48px] flex items-center justify-center pt-1">
                             <!-- Main Submit Button -->
                             <button type="submit" id="submitBtn" class="w-full py-3.5 px-4 bg-slate-950 hover:bg-slate-850 active:scale-[0.99] text-white text-xs font-extrabold rounded-2xl shadow-lg transition-all duration-300 flex items-center justify-center gap-2.5 cursor-pointer">
@@ -398,7 +411,7 @@ require_once __DIR__ . '/includes/header.php';
             setTimeout(() => {
                 letterWrapper.classList.add("animate-sky-fly");
 
-                // Step 4: Submit form to PHP backend
+                // Step 4: Submit form to PHP backend to store data in user_messages table
                 setTimeout(() => {
                     isPigeonFlyingSubmitted = true;
                     form.submit();
