@@ -51,12 +51,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $newFileName = 'cust_' . time() . '_' . mt_rand(1000, 9999) . '.' . $fileExt;
             $uploadDir   = __DIR__ . '/uploads/';
             
+            // ফোল্ডার না থাকলে তৈরি করা এবং পারমিশন নিশ্চিত করা
             if (!is_dir($uploadDir)) {
                 @mkdir($uploadDir, 0777, true);
+                @chmod($uploadDir, 0777);
             }
 
-            if (move_uploaded_file($fileTmp, $uploadDir . $newFileName)) {
+            $destination = $uploadDir . $newFileName;
+            if (@move_uploaded_file($fileTmp, $destination)) {
                 $imagePath = 'uploads/' . $newFileName;
+            } else {
+                $errors[] = ($currentLang === 'bn') 
+                    ? 'ছবি আপলোড করতে সমস্যা হয়েছে। সার্ভারে "uploads" ফোল্ডারের পারমিশন চেক করুন।' 
+                    : 'Failed to move uploaded file. Please check folder permissions for "uploads".';
             }
         } else {
             $errors[] = ($currentLang === 'bn') ? 'শুধুমাত্র JPG, PNG বা WEBP ছবি আপলোড করা যাবে।' : 'Only JPG, PNG or WEBP images are allowed.';
@@ -149,7 +156,7 @@ require_once __DIR__ . '/includes/header.php';
     <!-- Profile Card Wrapper -->
     <div class="bg-white border border-slate-200/95 rounded-3xl overflow-hidden shadow-xl shadow-slate-200/50">
         
-        <!-- Profile Cover Header (Name & Email centered beautifully in a compact box) -->
+        <!-- Profile Cover Header -->
         <div class="min-h-[170px] bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 relative p-5 flex items-center justify-center">
             <div class="absolute inset-0 opacity-10 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:16px_16px]"></div>
             
@@ -157,10 +164,10 @@ require_once __DIR__ . '/includes/header.php';
                 <!-- Name & Email Card -->
                 <div class="space-y-0.5 bg-white/5 backdrop-blur-md px-5 py-3 rounded-xl border border-white/10 shadow-inner max-w-xs w-full">
                     <h1 class="text-base sm:text-lg font-black text-white tracking-tight">
-                        <?= e($userData['name'] ?? 'Otishi Puspi Islam') ?>
+                        <?= e($userData['name'] ?? '') ?>
                     </h1>
                     <p class="text-[11px] font-medium text-slate-300">
-                        <?= e($userData['email'] ?? 'j@gmail.com') ?>
+                        <?= e($userData['email'] ?? '') ?>
                     </p>
                 </div>
 
