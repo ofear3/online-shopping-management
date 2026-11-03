@@ -22,7 +22,7 @@ $whereClauses = [];
 $params = [];
 $types = '';
 
-// ক্যাটাগরি ফিল্টার (আইডি অথবা নাম দুটোই হ্যান্ডেল করার জন্য ফিক্সড লজিক)
+// ক্যাটাগরি ফিল্টার
 if ($selectedCategory !== 'all') {
     if (is_numeric($selectedCategory)) {
         $whereClauses[] = "category_id = ?";
@@ -128,7 +128,7 @@ require_once __DIR__ . '/includes/header.php';
                 ?>
                     <a href="?category=<?= urlencode($catKey) ?><?= !empty($searchQuery) ? '&search=' . urlencode($searchQuery) : '' ?>&sort=<?= $sortBy ?>"
                        class="px-4 py-2.5 rounded-2xl text-xs font-bold transition flex items-center gap-1.5 <?= $isActive ? 'bg-slate-950 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' ?>">
-                        <?= e($catLabel) ?>
+                        <?= htmlspecialchars($catLabel) ?>
                     </a>
                 <?php endforeach; ?>
             </div>
@@ -161,17 +161,17 @@ require_once __DIR__ . '/includes/header.php';
 
                     <div id="sortDropdownMenu" 
                          class="hidden absolute right-0 mt-2 w-full bg-white border border-slate-200 rounded-2xl shadow-xl py-1.5 z-50 space-y-0.5 transition-all">
-                        <a href="?category=<?= e($selectedCategory) ?><?= !empty($searchQuery) ? '&search=' . urlencode($searchQuery) : '' ?>&sort=newest" 
+                        <a href="?category=<?= htmlspecialchars($selectedCategory) ?><?= !empty($searchQuery) ? '&search=' . urlencode($searchQuery) : '' ?>&sort=newest" 
                            class="flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold transition mx-1 rounded-xl whitespace-nowrap <?= $sortBy === 'newest' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' ?>">
                             <span class="shrink-0">✨</span>
                             <span><?= $currentLang === 'bn' ? 'নতুন কালেকশন' : 'Newest Arrivals' ?></span>
                         </a>
-                        <a href="?category=<?= e($selectedCategory) ?><?= !empty($searchQuery) ? '&search=' . urlencode($searchQuery) : '' ?>&sort=price_low" 
+                        <a href="?category=<?= htmlspecialchars($selectedCategory) ?><?= !empty($searchQuery) ? '&search=' . urlencode($searchQuery) : '' ?>&sort=price_low" 
                            class="flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold transition mx-1 rounded-xl whitespace-nowrap <?= $sortBy === 'price_low' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' ?>">
                             <span class="shrink-0">📉</span>
                             <span><?= $currentLang === 'bn' ? 'দাম: কম থেকে বেশি' : 'Price: Low to High' ?></span>
                         </a>
-                        <a href="?category=<?= e($selectedCategory) ?><?= !empty($searchQuery) ? '&search=' . urlencode($searchQuery) : '' ?>&sort=price_high" 
+                        <a href="?category=<?= htmlspecialchars($selectedCategory) ?><?= !empty($searchQuery) ? '&search=' . urlencode($searchQuery) : '' ?>&sort=price_high" 
                            class="flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold transition mx-1 rounded-xl whitespace-nowrap <?= $sortBy === 'price_high' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' ?>">
                             <span class="shrink-0">📈</span>
                             <span><?= $currentLang === 'bn' ? 'দাম: বেশি থেকে কম' : 'Price: High to Low' ?></span>
@@ -204,26 +204,29 @@ require_once __DIR__ . '/includes/header.php';
                     $discountPercent = isset($item['discount_percent']) ? (float)$item['discount_percent'] : 0;
                     $hasDiscount = ($discountPercent > 0);
                     
+                    // সঠিক ম্যাথমেটিক্যাল ক্যালকুলেশন
                     $savedAmount = $hasDiscount ? ($price * ($discountPercent / 100)) : 0;
                     $finalPrice = $hasDiscount ? ($price - $savedAmount) : $price;
 
-                    // Clean and normalize the image path safely
+                    // ইমেজের সঠিক পাথ হ্যান্ডেল করা
                     $rawImage = trim($item['image'] ?? '');
                     $rawImage = ltrim($rawImage, '/');
                     $rawImage = preg_replace('/^(\.\.\/)+/', '', $rawImage);
-                    // সঠিক পাথ সেট করা হলো যাতে প্রজেক্ট ফোল্ডার থেকে সরাসরি পায়
-                    $imagePath = !empty($rawImage) ? '/online-shopping-management/' . $rawImage : '';
+                    
+                    $cleanedImage = str_replace(['online-shopping-management/', 'aatpoure/'], '', $rawImage);
+                    $imagePath = !empty($rawImage) ? '/online-shopping-management/' . ltrim($cleanedImage, '/') : '';
+                    $fullServerPath = $_SERVER['DOCUMENT_ROOT'] . '/online-shopping-management/' . ltrim($cleanedImage, '/');
                 ?>
                     <div class="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-xs hover:shadow-xl transition duration-300 flex flex-col justify-between group">
                         
-                        <!-- Image Area -->
-                        <div class="relative h-72 bg-slate-100 overflow-hidden">
-                            <a href="product-details.php?id=<?= e((string)$item['id']) ?>">
-                                <?php if (!empty($rawImage) && file_exists($_SERVER['DOCUMENT_ROOT'] . '/online-shopping-management/' . $rawImage)): ?>
-                                    <img src="<?= e($imagePath) ?>" alt="<?= e($item['name']) ?>" 
-                                         class="w-full h-full object-cover group-hover:scale-105 transition duration-500">
+                        <!-- Image Area (Fixed for Landscape/Portrait without cutting) -->
+                        <div class="relative h-72 bg-slate-900/5 overflow-hidden flex items-center justify-center p-3">
+                            <a href="product-details.php?id=<?= htmlspecialchars((string)$item['id']) ?>" class="w-full h-full flex items-center justify-center">
+                                <?php if (!empty($rawImage) && file_exists($fullServerPath)): ?>
+                                    <img src="<?= htmlspecialchars($imagePath, ENT_QUOTES, 'UTF-8') ?>" alt="<?= htmlspecialchars($item['name']) ?>" 
+                                         class="w-full h-full object-contain object-center group-hover:scale-105 transition duration-500 drop-shadow-sm">
                                 <?php else: ?>
-                                    <div class="w-full h-full flex items-center justify-center text-slate-300 font-bold text-xs uppercase">
+                                    <div class="w-full h-full flex items-center justify-center text-slate-400 font-bold text-xs uppercase">
                                         NOVERA
                                     </div>
                                 <?php endif; ?>
@@ -231,7 +234,7 @@ require_once __DIR__ . '/includes/header.php';
 
                             <!-- Discount Tag Badge -->
                             <?php if ($hasDiscount): ?>
-                                <div class="absolute top-3 left-3 bg-rose-600 text-white text-[10px] font-black px-3 py-1 rounded-xl shadow-md flex items-center gap-1 animate-pulse">
+                                <div class="absolute top-3 left-3 bg-rose-600 text-white text-[10px] font-black px-3 py-1 rounded-xl shadow-md flex items-center gap-1 animate-pulse z-10">
                                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
                                     <span><?= round($discountPercent) ?>% OFF</span>
                                 </div>
@@ -241,13 +244,13 @@ require_once __DIR__ . '/includes/header.php';
                         <!-- Content Area -->
                         <div class="p-5 space-y-3 flex-1 flex flex-col justify-between">
                             <div class="space-y-1.5">
-                                <a href="product-details.php?id=<?= e((string)$item['id']) ?>" class="block">
+                                <a href="product-details.php?id=<?= htmlspecialchars((string)$item['id']) ?>" class="block">
                                     <h3 class="font-bold text-slate-900 text-sm group-hover:text-amber-600 transition truncate">
-                                        <?= e($item['name']) ?>
+                                        <?= htmlspecialchars($item['name']) ?>
                                     </h3>
                                 </a>
                                 <p class="text-xs text-slate-500 line-clamp-2 leading-relaxed">
-                                    <?= e($item['description'] ?? '') ?>
+                                    <?= htmlspecialchars($item['description'] ?? '') ?>
                                 </p>
                             </div>
 
@@ -270,7 +273,7 @@ require_once __DIR__ . '/includes/header.php';
                                     <?php endif; ?>
                                 </div>
 
-                                <a href="product-details.php?id=<?= e((string)$item['id']) ?>" 
+                                <a href="product-details.php?id=<?= htmlspecialchars((string)$item['id']) ?>" 
                                    class="px-3.5 py-2.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-black rounded-xl text-xs transition flex items-center gap-1.5 shadow-md shadow-amber-500/20">
                                     <span><?= $currentLang === 'bn' ? 'বিস্তারিত' : 'View' ?></span>
                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>

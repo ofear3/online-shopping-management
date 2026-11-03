@@ -21,16 +21,16 @@ $userName = $_SESSION['user_name'] ?? 'Valued Guest';
 // Helper Functions for OpenAI Context
 // ----------------------------------------------------
 
-// ১. ডাটাবেজ থেকে সমস্ত প্রোডাক্ট ফেচ করে প্রম্পটে দেওয়া
+// ১. ডাটাবেজ থেকে সমস্ত প্রোডাক্ট ফেচ করে প্রম্পটে দেওয়া
 function getShopProductsContext(mysqli $conn): string {
     $products = [];
-    $res = $conn->query("SELECT p.id, p.name, p.price, p.discount_percent, c.name as category FROM products p LEFT JOIN categories c ON p.category_id = c.id ORDER BY p.id DESC LIMIT 15");
+    $res = $conn->query("SELECT p.id, p.name, p.price, p.discount_percent, p.description, c.name as category FROM products p LEFT JOIN categories c ON p.category_id = c.id ORDER BY p.id DESC LIMIT 20");
     if ($res) {
         while ($row = $res->fetch_assoc()) {
             $price = (float)$row['price'];
             $disc = (float)($row['discount_percent'] ?? 0);
             $finalPrice = $disc > 0 ? ($price - ($price * ($disc / 100))) : $price;
-            $products[] = "ID: {$row['id']} | Name: {$row['name']} | Category: {$row['category']} | Price: ৳{$finalPrice}";
+            $products[] = "ID: {$row['id']} | Name: {$row['name']} | Category: {$row['category']} | Price: ৳{$finalPrice} | Details: {$row['description']}";
         }
     }
     return !empty($products) ? implode("\n", $products) : "No products available at the moment.";
@@ -63,7 +63,7 @@ function getUserOrdersContext(mysqli $conn, int $userId, array $sessionOrderIds)
 // ----------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     header('Content-Type: application/json');
-    $action =$_POST['action'];
+    $action = $_POST['action'];
 
     // Action A: Real OpenAI Chat Response
     if ($action === 'ai_chat') {
@@ -74,30 +74,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             exit;
         }
 
-        $sessionOrderIds =$_SESSION['my_order_ids'] ?? [];
+        $sessionOrderIds = $_SESSION['my_order_ids'] ?? [];
         $productCatalog = getShopProductsContext($conn);
-        $userOrders = getUserOrdersContext($conn, $userId,$sessionOrderIds);
+        $userOrders = getUserOrdersContext($conn, $userId, $sessionOrderIds);
 
         // System Prompt Building
-        $systemPrompt = "You are 'NOVERA Concierge', an extremely polite, warm, and professional AI Fashion Stylist and Sales Advisor for the luxury e-commerce brand 'NOVERA'.
-Customer's Name: {$userName}
+        $systemPrompt = "You are NOVERA Concierge, a polite, warm, and professional AI Fashion Stylist and Sales Advisor for the luxury e-commerce brand NOVERA.
+Customer Name: {$userName}
 Customer Login Status: " . ($userId > 0 ? "Logged In" : "Guest") . "
 
 Here is the LIVE PRODUCT CATALOG currently available in NOVERA store:
 {$productCatalog}
 
-Here is the Customer's Recent Order History (if any):
+Here is the Customer's Recent Order History:
 {$userOrders}
 
 CRITICAL GUIDELINES:
 1. Always address the customer naturally and warmly.
-2. If the user asks for outfit recommendations for any occasion (like wedding, party, office, casual, Eid, etc.), act like an expert human stylist. Recommend relevant clothing from the catalog provided above.
-3. If user asks about their order status, check their order history context provided above and answer accurately.
+2. If the user asks for outfit recommendations for any occasion (like wedding, party, office, casual, Eid, Panjabi, Saree, etc.), act like an expert human stylist. Recommend relevant clothing from the catalog provided above based on keywords.
+3. If the user asks about their order status, check their order history context provided above and answer accurately.
 4. Always respond in the same language as the user (Bangla, English, or Banglish).
-5. Keep your tone luxury, supportive, and natural.
-6. When recommending specific products, mention their ID and Exact Name so the system can show them as product cards if appropriate.";
+5. Keep your tone luxurious, supportive, and natural. Do not use excessive symbols or emojis.";
 
-        // Prepare OpenAI Payload
         $messagesPayload = [
             ['role' => 'system', 'content' => $systemPrompt],
             ['role' => 'user', 'content' => $message]
@@ -107,10 +105,10 @@ CRITICAL GUIDELINES:
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
-            'model' => 'gpt-4o-mini', // Fast & Intelligent
+            'model' => 'gpt-4o-mini',
             'messages' => $messagesPayload,
             'temperature' => 0.7,
-            'max_tokens' => 500
+            'max_tokens' => 600
         ]));
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Content-Type: application/json',
@@ -122,35 +120,98 @@ CRITICAL GUIDELINES:
         curl_close($ch);
 
         $type = "text";
-        $productCards = [];$replyText = "";
+        $productCards = [];
+        $replyText = "";
 
-        if ($curlErr) {$replyText = "Apologies, I am having trouble connecting to OpenAI. Please check your API Key or network.";
+        if ($curlErr) {
+            $replyText = "Apologies, I am having trouble connecting to OpenAI. Please check your API configuration.";
         } else {
             $responseData = json_decode($response, true);
             if (isset($responseData['choices'][0]['message']['content'])) {
-                $replyText =$responseData['choices'][0]['message']['content'];
+                $replyText = $responseData['choices'][0]['message']['content'];
 
-                // Intelligent Product Card Attach Logic
-                // If AI mentioned products, show relevant product cards in UI
+                // Keyword Based Intelligent Product Filtering
                 $msgLower = strtolower($message);
-                if (preg_match('/(wedding|panjabi|biye|dress|shirt|collection|show|find|buy|suggest|show)/i', $msgLower)) {$type = "products";
-                    $pRes =$conn->query("SELECT p.*, c.name AS category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id ORDER BY p.id DESC LIMIT 4");
-                    if ($pRes) {
-                        while ($p =$pRes->fetch_assoc()) {
+                $keywords = explode(' ', $msgLower);
+                
+                $searchClauses = [];
+                $searchParams = [];
+                $typesStr = '';
+
+                foreach ($keywords as $kw) {
+                    if (strlen($kw) > 2) {
+                        $searchClauses[] = "(LOWER(p.name) LIKE ? OR LOWER(p.description) LIKE ? OR LOWER(c.name) LIKE ?)";
+                        $paramVal = '%' . $kw . '%';
+                        $searchParams[] = $paramVal;
+                        $searchParams[] = $paramVal;
+                        $searchParams[] = $paramVal;
+                        $typesStr .= 'sss';
+                    }
+                }
+
+                if (!empty($searchClauses)) {
+                    $sqlQuery = "SELECT p.*, c.name AS category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE " . implode(" OR ", $searchClauses) . " ORDER BY p.id DESC LIMIT 4";
+                    $stmtSearch = $conn->prepare($sqlQuery);
+                    if ($stmtSearch) {
+                        $stmtSearch->bind_param($typesStr, ...$searchParams);
+                        $stmtSearch->execute();
+                        $pRes = $stmtSearch->get_result();
+                        while ($p = $pRes->fetch_assoc()) {
                             $price = (float)$p['price'];
                             $disc = (float)($p['discount_percent'] ?? 0);
-                            $final =$disc > 0 ? ($price - ($price * ($disc / 100))) :$price;
+                            $final = $disc > 0 ? ($price - ($price * ($disc / 100))) : $price;
                             $productCards[] = [
                                 'id' => (int)$p['id'],
                                 'name' => $p['name'],
                                 'price' => round($final, 2),
-                                'image' => !empty($p['image']) ?$p['image'] : ''
+                                'image' => !empty($p['image']) ? $p['image'] : ''
+                            ];
+                        }
+                        $stmtSearch->close();
+                    }
+                }
+
+                // যদি কোনো কীওয়ার্ড ডিরেক্ট না মেলে বা সাধারণ প্রশ্ন/হাই গ্রিটিং হয়, তবুও প্রডাক্ট কার্ড শোর জন্য ডিফেন্স লাইন
+                if (!empty($productCards)) {
+                    $type = "products";
+                } else {
+                    // সাধারণ প্রশ্নের ক্ষেত্রেও ইউজারের সুবিধার জন্য টপ ৪টি ফিচারড প্রডাক্ট রিটার্ন করবে
+                    $type = "products";
+                    $pRes = $conn->query("SELECT p.*, c.name AS category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id ORDER BY p.id DESC LIMIT 4");
+                    if ($pRes) {
+                        while ($p = $pRes->fetch_assoc()) {
+                            $price = (float)$p['price'];
+                            $disc = (float)($p['discount_percent'] ?? 0);
+                            $final = $disc > 0 ? ($price - ($price * ($disc / 100))) : $price;
+                            $productCards[] = [
+                                'id' => (int)$p['id'],
+                                'name' => $p['name'],
+                                'price' => round($final, 2),
+                                'image' => !empty($p['image']) ? $p['image'] : ''
                             ];
                         }
                     }
                 }
+
             } else {
-                $replyText = "I am at your service, " . htmlspecialchars($userName) . ". Please make sure your OpenAI API key is active.";
+                $replyText = "Greetings " . htmlspecialchars($userName) . "! How may I assist you with our luxury collection today?";
+                
+                // এপিআই কী কোনো কারণে কাজ না করলেও প্রডাক্ট শো করবে
+                $type = "products";
+                $pRes = $conn->query("SELECT p.*, c.name AS category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id ORDER BY p.id DESC LIMIT 4");
+                if ($pRes) {
+                    while ($p = $pRes->fetch_assoc()) {
+                        $price = (float)$p['price'];
+                        $disc = (float)($p['discount_percent'] ?? 0);
+                        $final = $disc > 0 ? ($price - ($price * ($disc / 100))) : $price;
+                        $productCards[] = [
+                            'id' => (int)$p['id'],
+                            'name' => $p['name'],
+                            'price' => round($final, 2),
+                            'image' => !empty($p['image']) ? $p['image'] : ''
+                        ];
+                    }
+                }
             }
         }
 
@@ -176,9 +237,11 @@ CRITICAL GUIDELINES:
             exit;
         }
 
-        $pStmt =$conn->prepare("SELECT * FROM products WHERE id = ? LIMIT 1");
+        $pStmt = $conn->prepare("SELECT * FROM products WHERE id = ? LIMIT 1");
         $pStmt->bind_param("i", $productId);
-        $pStmt->execute();$prod = $pStmt->get_result()->fetch_assoc();$pStmt->close();
+        $pStmt->execute();
+        $prod = $pStmt->get_result()->fetch_assoc();
+        $pStmt->close();
 
         if (!$prod) {
             echo json_encode(['success' => false, 'message' => 'Selected product not found.']);
@@ -187,29 +250,30 @@ CRITICAL GUIDELINES:
 
         $price = (float)$prod['price'];
         $disc  = (float)($prod['discount_percent'] ?? 0);
-        $finalPrice =$disc > 0 ? ($price - ($price * ($disc / 100))) :$price;
+        $finalPrice = $disc > 0 ? ($price - ($price * ($disc / 100))) : $price;
         
-        $shipping   = 100.00;
-        $vat        =$finalPrice * 0.05;
-        $grandTotal =$finalPrice + $shipping +$vat;
+        $shipping = 100.00;
+        $vat = $finalPrice * 0.05;
+        $grandTotal = $finalPrice + $shipping + $vat;
 
         try {
-            $stmt =$conn->prepare("INSERT INTO orders (user_id, total_amount, status, shipping_address, phone, payment_method, created_at) VALUES (?, ?, 'pending', ?, ?, ?, NOW())");
-            $stmt->bind_param("idsss", $userId, $grandTotal,$address, $phone,$payment);
+            $stmt = $conn->prepare("INSERT INTO orders (user_id, total_amount, status, shipping_address, phone, payment_method, created_at) VALUES (?, ?, 'Pending', ?, ?, ?, NOW())");
+            $stmt->bind_param("idsss", $userId, $grandTotal, $address, $phone, $payment);
             
             if ($stmt->execute()) {
-                $orderId =$stmt->insert_id;
+                $orderId = $stmt->insert_id;
                 $stmt->close();
 
-                if (!isset($_SESSION['my_order_ids'])) {$_SESSION['my_order_ids'] = [];
+                if (!isset($_SESSION['my_order_ids'])) {
+                    $_SESSION['my_order_ids'] = [];
                 }
-                $_SESSION['my_order_ids'][] =$orderId;
-                $_SESSION['placed_order_id'] =$orderId;
+                $_SESSION['my_order_ids'][] = $orderId;
+                $_SESSION['placed_order_id'] = $orderId;
 
                 echo json_encode([
                     'success' => true,
                     'order_id' => $orderId,
-                    'message' => "Congratulations " . htmlspecialchars($userName) . "! Your order #ORD-" . str_pad((string)$orderId, 5, '0', STR_PAD_LEFT) . " has been placed successfully and forwarded to our delivery team. Total: ৳" . number_format($grandTotal, 0) . "."
+                    'message' => "Congratulations " . htmlspecialchars($userName) . "! Your order #ORD-" . str_pad((string)$orderId, 5, '0', STR_PAD_LEFT) . " has been placed successfully. Total Amount: ৳" . number_format($grandTotal, 0) . "."
                 ]);
                 exit;
             }
@@ -232,17 +296,17 @@ require_once __DIR__ . '/includes/header.php';
                 <div class="relative">
                     <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-tr from-emerald-500 to-amber-400 p-0.5 flex items-center justify-center shadow-lg">
                         <div class="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center text-emerald-400 font-black text-sm">
-                            ✨
+                            AI
                         </div>
                     </div>
                     <span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-slate-950 rounded-full animate-pulse"></span>
                 </div>
                 <div>
                     <h1 class="text-sm sm:text-base font-black tracking-tight flex items-center gap-2">
-                        NOVERA AI Concierge
+                        NOVERA Concierge
                         <span class="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 font-bold text-[9px] rounded-full uppercase border border-emerald-400/30">OpenAI Powered</span>
                     </h1>
-                    <p class="text-[11px] text-slate-300">Human-like Fashion Advisor & Instant Checkout</p>
+                    <p class="text-[11px] text-slate-300">Professional Fashion Advisor & Instant Checkout</p>
                 </div>
             </div>
 
@@ -257,14 +321,14 @@ require_once __DIR__ . '/includes/header.php';
             <!-- Default Welcome Message -->
             <div class="flex items-start gap-3 max-w-2xl">
                 <div class="w-8 h-8 rounded-xl bg-slate-950 text-emerald-400 flex items-center justify-center font-bold shrink-0 shadow-md">
-                    ✨
+                    AI
                 </div>
                 <div class="bg-white p-4 rounded-2xl rounded-tl-none border border-slate-200/80 shadow-xs space-y-2 text-slate-800 leading-relaxed">
                     <p class="font-bold text-slate-900">
-                        Greetings <?= htmlspecialchars($userName) ?>! 👋
+                        Greetings <?= htmlspecialchars($userName) ?>.
                     </p>
                     <p>
-                        I am your OpenAI-powered personal fashion concierge. Ask me anything about outfit suggestions for weddings, events, size guides, or order tracking! You can also <strong class="text-emerald-600">place an order directly right here inside this chat</strong>!
+                        I am your personal AI fashion concierge for NOVERA. Ask me for outfit recommendations based on your preferences, check your order status, or place an order directly inside this chat interface.
                     </p>
                 </div>
             </div>
@@ -273,20 +337,20 @@ require_once __DIR__ . '/includes/header.php';
 
         <!-- Suggestion Chips Bar -->
         <div class="px-4 py-2 bg-white border-t border-slate-100 flex items-center gap-2 overflow-x-auto whitespace-nowrap scrollbar-none shrink-0 text-[11px]">
-            <button onclick="sendQuickMsg('আমি বিয়েতে যাব, কী পরা যায়?')" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 border border-slate-200 text-slate-700 font-bold rounded-xl transition cursor-pointer">
-                💍 বিয়ে বাড়ির সেরা আউটফিট
+            <button onclick="sendQuickMsg('I need a wedding outfit recommendation')" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 border border-slate-200 text-slate-700 font-bold rounded-xl transition cursor-pointer">
+                Wedding Outfits
             </button>
             <button onclick="sendQuickMsg('Show me Panjabi collection')" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 border border-slate-200 text-slate-700 font-bold rounded-xl transition cursor-pointer">
-                ✨ Panjabi Collection
+                Panjabi Collection
             </button>
             <button onclick="sendQuickMsg('Where is my order status?')" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 border border-slate-200 text-slate-700 font-bold rounded-xl transition cursor-pointer">
-                📦 Track My Order
+                Track My Order
             </button>
         </div>
 
         <!-- Fixed Chat Input Bar -->
         <form id="chatForm" onsubmit="handleUserSubmit(event)" class="p-3 sm:p-4 bg-white border-t border-slate-200/80 flex items-center gap-2 shrink-0">
-            <input type="text" id="userInput" placeholder="Ask AI anything about fashion, wedding attire, or order status..." 
+            <input type="text" id="userInput" placeholder="Ask AI about fashion, outfits, or order status..." 
                    class="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-800 focus:outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition">
             
             <button type="submit" class="py-3 px-5 bg-slate-950 hover:bg-emerald-600 active:scale-95 text-white font-black rounded-2xl shadow-lg transition flex items-center gap-1 cursor-pointer shrink-0">
@@ -349,7 +413,7 @@ require_once __DIR__ . '/includes/header.php';
             </div>
 
             <button type="submit" class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl shadow-lg transition text-xs cursor-pointer">
-                Confirm & Place Order Now 🚀
+                Confirm & Place Order Now
             </button>
         </form>
 
@@ -368,14 +432,11 @@ require_once __DIR__ . '/includes/header.php';
         const msg = input.value.trim();
         if (!msg) return;
 
-        // 1. User Message
         appendUserBubble(msg);
         input.value = '';
 
-        // 2. Typing Indicator
         const typingId = appendTypingIndicator();
 
-        // 3. Send Request
         const formData = new FormData();
         formData.append('action', 'ai_chat');
         formData.append('message', msg);
@@ -417,7 +478,7 @@ require_once __DIR__ . '/includes/header.php';
         const id = 'typing_' + Date.now();
         const html = `
             <div id="${id}" class="flex items-center gap-3">
-                <div class="w-8 h-8 rounded-xl bg-slate-950 text-emerald-400 flex items-center justify-center font-bold shrink-0 shadow-md">✨</div>
+                <div class="w-8 h-8 rounded-xl bg-slate-950 text-emerald-400 flex items-center justify-center font-bold shrink-0 shadow-md">AI</div>
                 <div class="bg-white px-4 py-3 rounded-2xl border border-slate-200 flex items-center gap-1.5 shadow-xs">
                     <span class="w-2 h-2 bg-emerald-500 rounded-full animate-bounce"></span>
                     <span class="w-2 h-2 bg-emerald-500 rounded-full animate-bounce [animation-delay:0.2s]"></span>
@@ -442,7 +503,9 @@ require_once __DIR__ . '/includes/header.php';
         if (type === 'products' && data.length > 0) {
             extraContent = '<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">';
             data.forEach(p => {
-                const imgPath = p.image ? '/online-shopping-management/' + p.image : '';
+                const cleanedImg = p.image ? p.image.replace(/^(\.\.\/)+/, '').replace(/^online-shopping-management\//, '') : '';
+                const imgPath = cleanedImg ? '/online-shopping-management/' + cleanedImg : '';
+                
                 extraContent += `
                     <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2 flex flex-col justify-between">
                         <div class="flex items-center gap-3">
@@ -464,12 +527,11 @@ require_once __DIR__ . '/includes/header.php';
             extraContent += '</div>';
         }
 
-        // Convert Newlines to Breaks for OpenAI formatting
         const formattedReply = escapeHtml(replyText).replace(/\n/g, '<br>');
 
         const html = `
             <div class="flex items-start gap-3 max-w-2xl">
-                <div class="w-8 h-8 rounded-xl bg-slate-950 text-emerald-400 flex items-center justify-center font-bold shrink-0 shadow-md">✨</div>
+                <div class="w-8 h-8 rounded-xl bg-slate-950 text-emerald-400 flex items-center justify-center font-bold shrink-0 shadow-md">AI</div>
                 <div class="bg-white p-4 rounded-2xl rounded-tl-none border border-slate-200/80 shadow-xs space-y-2 text-slate-800 leading-relaxed w-full">
                     <p class="font-medium">${formattedReply}</p>
                     ${extraContent}
