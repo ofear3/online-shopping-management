@@ -29,8 +29,11 @@ if ($selectedCategory !== 'all') {
         $params[] = (int)$selectedCategory;
         $types .= 'i';
     } else {
-        $whereClauses[] = "category_id IN (SELECT id FROM categories WHERE LOWER(name) LIKE ?)";
-        $params[] = '%' . strtolower($selectedCategory) . '%';
+        // যদি URL-এ kids পাঠানো হয়, ব্যাকএন্ডে সেটা ডাটাবেজের 'child' ক্যাটাগরির সাথে মিল রেখে কুয়েরি করবে
+        $categoryToQuery = (strtolower($selectedCategory) === 'kids') ? 'child' : $selectedCategory;
+        
+        $whereClauses[] = "category_id IN (SELECT id FROM categories WHERE LOWER(name) = ?)";
+        $params[] = strtolower($categoryToQuery);
         $types .= 's';
     }
 }
@@ -113,6 +116,7 @@ require_once __DIR__ . '/includes/header.php';
                     }
                 }
                 
+                // ডাটাবেজ ব্যাকএন্ড লজিক 'child' ধরে রাখবে, কিন্তু UI-তে 'Kids' ডিসপ্লে হবে
                 if (empty($dbCategories)) {
                     $dbCategories = ['men' => 'Men', 'women' => 'Women', 'child' => 'Kids'];
                 }
@@ -124,11 +128,13 @@ require_once __DIR__ . '/includes/header.php';
                 </a>
 
                 <?php foreach ($dbCategories as $catKey => $catLabel):
-                    $isActive = ($selectedCategory === $catKey || $selectedCategory === strtolower($catLabel));
+                    // UI-তে child দেখালে সেটাকে Kids করা হচ্ছে
+                    $displayLabel = (strtolower($catLabel) === 'child') ? 'Kids' : $catLabel;
+                    $isActive = ($selectedCategory === $catKey || strtolower($selectedCategory) === strtolower($displayLabel));
                 ?>
                     <a href="?category=<?= urlencode($catKey) ?><?= !empty($searchQuery) ? '&search=' . urlencode($searchQuery) : '' ?>&sort=<?= $sortBy ?>"
                        class="px-4 py-2.5 rounded-2xl text-xs font-bold transition flex items-center gap-1.5 <?= $isActive ? 'bg-slate-950 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' ?>">
-                        <?= htmlspecialchars($catLabel) ?>
+                        <?= htmlspecialchars($displayLabel) ?>
                     </a>
                 <?php endforeach; ?>
             </div>
@@ -204,11 +210,9 @@ require_once __DIR__ . '/includes/header.php';
                     $discountPercent = isset($item['discount_percent']) ? (float)$item['discount_percent'] : 0;
                     $hasDiscount = ($discountPercent > 0);
                     
-                    // সঠিক ম্যাথমেটিক্যাল ক্যালকুলেশন
                     $savedAmount = $hasDiscount ? ($price * ($discountPercent / 100)) : 0;
                     $finalPrice = $hasDiscount ? ($price - $savedAmount) : $price;
 
-                    // ইমেজের সঠিক পাথ হ্যান্ডেল করা
                     $rawImage = trim($item['image'] ?? '');
                     $rawImage = ltrim($rawImage, '/');
                     $rawImage = preg_replace('/^(\.\.\/)+/', '', $rawImage);
@@ -219,7 +223,7 @@ require_once __DIR__ . '/includes/header.php';
                 ?>
                     <div class="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-xs hover:shadow-xl transition duration-300 flex flex-col justify-between group">
                         
-                        <!-- Image Area (Fixed for Landscape/Portrait without cutting) -->
+                        <!-- Image Area -->
                         <div class="relative h-72 bg-slate-900/5 overflow-hidden flex items-center justify-center p-3">
                             <a href="product-details.php?id=<?= htmlspecialchars((string)$item['id']) ?>" class="w-full h-full flex items-center justify-center">
                                 <?php if (!empty($rawImage) && file_exists($fullServerPath)): ?>

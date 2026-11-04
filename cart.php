@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     $price = (float)$product['price'];
                     $disc  = (float)($product['discount_percent'] ?? 0);
-                    $final = $disc > 0 ? ($price - ($price * ($disc / 100))) : $price;
+                    $final = $disc > 0 ? ($price - ($price * $disc / 100)) : $price;
 
                     $_SESSION['cart'][$cartKey] = [
                         'id'       => $product['id'],
@@ -155,8 +155,15 @@ require_once __DIR__ . '/includes/header.php';
                                     
                                     <div class="flex items-center gap-4 w-full sm:w-auto">
                                         <div class="w-20 h-24 bg-slate-100 rounded-2xl overflow-hidden shrink-0 border border-slate-100">
-                                            <?php if (!empty($item['image'])): ?>
-                                                <img src="/online-shopping-management/<?= e($item['image']) ?>" alt="<?= e($item['name']) ?>" class="w-full h-full object-cover">
+                                            <?php 
+                                                $rawImg = trim($item['image'] ?? '');
+                                                $cleanedImg = preg_replace('/^(\.\.\/)+/', '', $rawImg);
+                                                $cleanedImg = preg_replace('/^online-shopping-management\//', '', $cleanedImg);
+                                                $cleanedImg = ltrim($cleanedImg, '/');
+                                                $imgPath = !empty($cleanedImg) ? '/online-shopping-management/' . $cleanedImg : '';
+                                            ?>
+                                            <?php if (!empty($imgPath)): ?>
+                                                <img src="<?= e($imgPath) ?>" alt="<?= e($item['name']) ?>" class="w-full h-full object-cover">
                                             <?php else: ?>
                                                 <div class="w-full h-full flex items-center justify-center text-[10px] font-bold text-slate-400">NOVERA</div>
                                             <?php endif; ?>
