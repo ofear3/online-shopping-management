@@ -29,20 +29,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Action A: Add New Product
     if ($action === 'add_product') {
-        $name = trim($_POST['name'] ?? '');
+        $name        = trim($_POST['name'] ?? '');
         $category_id = (int)($_POST['category_id'] ?? 0);
-        $price = (float)($_POST['price'] ?? 0);
-        $stock = (int)($_POST['stock'] ?? 0);
-        $size = trim($_POST['size'] ?? 'Free Size');
+        $price       = (float)($_POST['price'] ?? 0);
+        $stock       = (int)($_POST['stock'] ?? 0);
         $description = trim($_POST['description'] ?? '');
+        $keywords    = trim($_POST['keywords'] ?? '');
 
-        if (!empty($name) && $price > 0) {
-            $stmt = $conn->prepare("INSERT INTO products (name, category_id, price, stock, size, description) VALUES (?, ?, ?, ?, ?, ?)");
+        if (!empty($name) && $price > 0 && $category_id > 0) {
+            $stmt = $conn->prepare("INSERT INTO products (name, category_id, price, stock, description, keywords) VALUES (?, ?, ?, ?, ?, ?)");
             if ($stmt) {
-                $stmt->bind_param("sidiss", $name, $category_id, $price, $stock, $size, $description);
+                $stmt->bind_param("sidian", $name, $category_id, $price, $stock, $description, $keywords);
+                // Fix parameter type definition for s, i, d, i, s, s
+                $stmt->close();
+
+                $stmt = $conn->prepare("INSERT INTO products (name, category_id, price, stock, description, keywords) VALUES (?, ?, ?, ?, ?, ?)");
+                $stmt->bind_param("sidiss", $name, $category_id, $price, $stock, $description, $keywords);
+                
                 if ($stmt->execute()) {
                     $_SESSION['toast_message'] = "Product Added Successfully!";
                     header('Location: products.php');
+                    exit;
+                } else {
+                    echo "Database Error: " . htmlspecialchars($stmt->error, ENT_QUOTES, 'UTF-8');
                     exit;
                 }
                 $stmt->close();
@@ -50,7 +59,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // Action B: Delete Product
+    // Action B: Update Existing Product (Live Edit)
+    if ($action === 'update_product') {
+        $product_id  = (int)($_POST['product_id'] ?? 0);
+        $name        = trim($_POST['name'] ?? '');
+        $category_id = (int)($_POST['category_id'] ?? 0);
+        $price       = (float)($_POST['price'] ?? 0);
+        $stock       = (int)($_POST['stock'] ?? 0);
+        $description = trim($_POST['description'] ?? '');
+        $keywords    = trim($_POST['keywords'] ?? '');
+
+        if ($product_id > 0 && !empty($name) && $price > 0 && $category_id > 0) {
+            $stmt = $conn->prepare("UPDATE products SET name = ?, category_id = ?, price = ?, stock = ?, description = ?, keywords = ? WHERE id = ?");
+            if ($stmt) {
+                $stmt->bind_param("sidiisi", $name, $category_id, $price, $stock, $description, $keywords, $product_id);
+                if ($stmt->execute()) {
+                    $_SESSION['toast_message'] = "Product Updated Successfully!";
+                    header('Location: products.php');
+                    exit;
+                } else {
+                    echo "Database Error: " . htmlspecialchars($stmt->error, ENT_QUOTES, 'UTF-8');
+                    exit;
+                }
+                $stmt->close();
+            }
+        }
+    }
+
+    // Action C: Delete Product
     if ($action === 'delete_product') {
         $product_id = (int)($_POST['product_id'] ?? 0);
         if ($product_id > 0) {
@@ -69,7 +105,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // ৪. ক্যাটাগরি এবং প্রোডাক্ট লিস্ট ফেচিং
-$categories_res = $conn->query("SELECT id, name FROM categories ORDER BY name ASC");
+$categories = [];
+$categories_res = $conn->query("SELECT id, name FROM categories ORDER BY id ASC");
+if ($categories_res) {
+    while ($c = $categories_res->fetch_assoc()) {
+        $categories[] = $c;
+    }
+}
+
 $products_list = $conn->query("
     SELECT p.*, c.name AS category_name 
     FROM products p 
@@ -79,13 +122,13 @@ $products_list = $conn->query("
 
 $totalProductsCount = ($products_list) ? $products_list->num_rows : 0;
 
-// ৫. লজিক শেষ হওয়ার পর হেডার এবং HTML রেন্ডার শুরু
+// ৫. লজিক শেষ হওয়ার পর হেডার এবং HTML রেন্ডার শুরু
 require_once __DIR__ . '/header.php';
 ?>
 
 <div class="p-6 md:p-8 space-y-8">
 
-    <!-- Page Header Banner (Matching Other Pages) -->
+    <!-- Page Header Banner -->
     <div class="bg-gradient-to-r from-zinc-950 via-zinc-900 to-indigo-950 rounded-3xl p-6 md:p-10 text-white shadow-2xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 border border-zinc-800/80">
         <div class="absolute -right-12 -bottom-12 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
         <div class="space-y-2 text-center md:text-left relative z-10">
@@ -106,7 +149,7 @@ require_once __DIR__ . '/header.php';
         </div>
     </div>
 
-    <!-- Products Table Card with Inner Scroll -->
+    <!-- Products Table Card -->
     <div class="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-xl">
         <div class="p-4 border-b border-zinc-800 bg-zinc-950/40 flex items-center justify-between sticky top-0 z-10 backdrop-blur-md">
             <h3 class="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
@@ -116,7 +159,6 @@ require_once __DIR__ . '/header.php';
             <span class="text-[11px] text-zinc-400">Catalog Inventory</span>
         </div>
 
-        <!-- Inner Scrollable Container -->
         <div class="max-h-[580px] overflow-y-auto">
             <div class="overflow-x-auto">
                 <table class="w-full text-left border-collapse text-xs">
@@ -126,7 +168,7 @@ require_once __DIR__ . '/header.php';
                             <th class="py-3.5 px-4 bg-zinc-950/90">Category</th>
                             <th class="py-3.5 px-4 bg-zinc-950/90">Price</th>
                             <th class="py-3.5 px-4 bg-zinc-950/90">Stock</th>
-                            <th class="py-3.5 px-4 bg-zinc-950/90">Size</th>
+                            <th class="py-3.5 px-4 bg-zinc-950/90">Keywords / Tags</th>
                             <th class="py-3.5 px-4 bg-zinc-950/90 text-right">Actions</th>
                         </tr>
                     </thead>
@@ -135,10 +177,10 @@ require_once __DIR__ . '/header.php';
                             <?php while ($item = $products_list->fetch_assoc()): ?>
                                 <tr class="hover:bg-zinc-800/40 transition">
                                     <td class="py-3.5 px-4 font-bold text-white">
-                                        <?= e($item['name']) ?>
+                                        <?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td class="py-3.5 px-4 text-zinc-400">
-                                        <?= e($item['category_name'] ?? 'General') ?>
+                                        <?= htmlspecialchars($item['category_name'] ?? 'General', ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td class="py-3.5 px-4 font-bold text-emerald-400">
                                         ৳<?= number_format((float)$item['price'], 2) ?>
@@ -146,12 +188,23 @@ require_once __DIR__ . '/header.php';
                                     <td class="py-3.5 px-4 font-bold text-white">
                                         <?= (int)$item['stock'] ?> <span class="text-[11px] text-zinc-400 font-normal">pcs</span>
                                     </td>
-                                    <td class="py-3.5 px-4">
-                                        <span class="px-2.5 py-1 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 font-bold text-[10px]">
-                                            <?= e($item['size'] ?? 'Free Size') ?>
-                                        </span>
+                                    <td class="py-3.5 px-4 text-zinc-400">
+                                        <?php if (!empty($item['keywords'])): ?>
+                                            <span class="px-2 py-0.5 bg-zinc-800 text-indigo-300 rounded-md text-[10px] font-mono"><?= htmlspecialchars($item['keywords'], ENT_QUOTES, 'UTF-8') ?></span>
+                                        <?php else: ?>
+                                            <span class="text-zinc-600 italic">No tags</span>
+                                        <?php endif; ?>
                                     </td>
-                                    <td class="py-3.5 px-4 text-right">
+                                    <td class="py-3.5 px-4 text-right space-x-1.5">
+                                        <!-- Edit Button with Icon -->
+                                        <button type="button" 
+                                                onclick='openEditProductModal(<?= json_encode($item, JSON_HEX_APOS | JSON_HEX_QUOT) ?>)' 
+                                                class="px-2.5 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 font-bold text-[11px] rounded-xl transition cursor-pointer inline-flex items-center gap-1">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                            Edit
+                                        </button>
+
+                                        <!-- Delete Form -->
                                         <form method="POST" action="products.php" onsubmit="return confirm('Are you sure you want to delete this product?');" class="inline">
                                             <input type="hidden" name="action" value="delete_product">
                                             <input type="hidden" name="product_id" value="<?= $item['id'] ?>">
@@ -182,50 +235,103 @@ require_once __DIR__ . '/header.php';
             <button onclick="closeAddProductModal()" class="text-zinc-500 hover:text-zinc-300 font-bold cursor-pointer">✕</button>
         </div>
 
-        <form method="POST" action="products.php" class="space-y-4">
+        <form method="POST" action="products.php" class="space-y-3">
             <input type="hidden" name="action" value="add_product">
 
             <div>
                 <label class="block text-xs font-semibold text-zinc-300 mb-1">Product Name</label>
-                <input type="text" name="name" required placeholder="e.g. Premium Cotton Shirt" class="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500">
+                <input type="text" name="name" required placeholder="e.g. Premium Cotton Shirt" class="w-full px-3.5 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500">
             </div>
 
             <div>
                 <label class="block text-xs font-semibold text-zinc-300 mb-1">Category</label>
-                <select name="category_id" class="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500 cursor-pointer">
-                    <option value="0">Select Category</option>
-                    <?php if ($categories_res): ?>
-                        <?php while ($c = $categories_res->fetch_assoc()): ?>
-                            <option value="<?= $c['id'] ?>"><?= e($c['name']) ?></option>
-                        <?php endwhile; ?>
-                    <?php endif; ?>
+                <select name="category_id" required class="w-full px-3.5 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500">
+                    <option value="" disabled selected>Select Category</option>
+                    <?php foreach ($categories as $c): ?>
+                        <option value="<?= (int)$c['id'] ?>"><?= htmlspecialchars($c['name'], ENT_QUOTES, 'UTF-8') ?></option>
+                    <?php endforeach; ?>
                 </select>
             </div>
 
             <div class="grid grid-cols-2 gap-3">
                 <div>
                     <label class="block text-xs font-semibold text-zinc-300 mb-1">Price (৳)</label>
-                    <input type="number" step="0.01" name="price" required placeholder="e.g. 1200" class="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500">
+                    <input type="number" step="0.01" name="price" required placeholder="1200" class="w-full px-3.5 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500">
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold text-zinc-300 mb-1">Initial Stock (pcs)</label>
-                    <input type="number" name="stock" required value="10" class="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500">
+                    <label class="block text-xs font-semibold text-zinc-300 mb-1">Initial Stock</label>
+                    <input type="number" name="stock" required value="10" class="w-full px-3.5 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500">
                 </div>
             </div>
 
             <div>
-                <label class="block text-xs font-semibold text-zinc-300 mb-1">Size Variant (S, M, L, XL, etc.)</label>
-                <input type="text" name="size" placeholder="e.g. L or Free Size" class="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500">
+                <label class="block text-xs font-semibold text-zinc-300 mb-1">Keywords / Search Tags (Comma separated)</label>
+                <input type="text" name="keywords" placeholder="e.g. summer, party, casual, cotton" class="w-full px-3.5 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500">
             </div>
 
             <div>
                 <label class="block text-xs font-semibold text-zinc-300 mb-1">Description</label>
-                <textarea name="description" rows="2" placeholder="Product details..." class="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"></textarea>
+                <textarea name="description" rows="2" placeholder="Product details..." class="w-full px-3.5 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"></textarea>
             </div>
 
             <div class="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
                 <button type="button" onclick="closeAddProductModal()" class="px-4 py-2 text-xs font-medium bg-zinc-800 text-zinc-300 rounded-xl cursor-pointer">Cancel</button>
                 <button type="submit" class="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-md cursor-pointer">Save Product</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Product Modal -->
+<div id="editProductModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md hidden">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+        <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
+            <h3 class="text-sm font-bold text-white">Edit Product (Live Update)</h3>
+            <button onclick="closeEditProductModal()" class="text-zinc-500 hover:text-zinc-300 font-bold cursor-pointer">✕</button>
+        </div>
+
+        <form method="POST" action="products.php" class="space-y-3">
+            <input type="hidden" name="action" value="update_product">
+            <input type="hidden" id="edit_product_id" name="product_id" value="">
+
+            <div>
+                <label class="block text-xs font-semibold text-zinc-300 mb-1">Product Name</label>
+                <input type="text" id="edit_name" name="name" required class="w-full px-3.5 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500">
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-zinc-300 mb-1">Category</label>
+                <select id="edit_category_id" name="category_id" required class="w-full px-3.5 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500">
+                    <?php foreach ($categories as $c): ?>
+                        <option value="<?= (int)$c['id'] ?>"><?= htmlspecialchars($c['name'], ENT_QUOTES, 'UTF-8') ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-zinc-300 mb-1">Price (৳)</label>
+                    <input type="number" step="0.01" id="edit_price" name="price" required class="w-full px-3.5 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-zinc-300 mb-1">Stock Quantity</label>
+                    <input type="number" id="edit_stock" name="stock" required class="w-full px-3.5 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-zinc-300 mb-1">Keywords / Search Tags</label>
+                <input type="text" id="edit_keywords" name="keywords" placeholder="e.g. summer, party, casual" class="w-full px-3.5 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500">
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-zinc-300 mb-1">Description</label>
+                <textarea id="edit_description" name="description" rows="2" class="w-full px-3.5 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"></textarea>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+                <button type="button" onclick="closeEditProductModal()" class="px-4 py-2 text-xs font-medium bg-zinc-800 text-zinc-300 rounded-xl cursor-pointer">Cancel</button>
+                <button type="submit" class="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-md cursor-pointer">Update Product</button>
             </div>
         </form>
     </div>
@@ -237,6 +343,20 @@ require_once __DIR__ . '/header.php';
     }
     function closeAddProductModal() {
         document.getElementById('addProductModal').classList.add('hidden');
+    }
+
+    function openEditProductModal(product) {
+        document.getElementById('edit_product_id').value = product.id;
+        document.getElementById('edit_name').value = product.name;
+        document.getElementById('edit_category_id').value = product.category_id;
+        document.getElementById('edit_price').value = product.price;
+        document.getElementById('edit_stock').value = product.stock;
+        document.getElementById('edit_keywords').value = product.keywords || '';
+        document.getElementById('edit_description').value = product.description || '';
+        document.getElementById('editProductModal').classList.remove('hidden');
+    }
+    function closeEditProductModal() {
+        document.getElementById('editProductModal').classList.add('hidden');
     }
 </script>
 

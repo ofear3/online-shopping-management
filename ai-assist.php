@@ -1,8 +1,8 @@
 <?php
 declare(strict_types=1);
 
-ini_set('display_errors', '1');
-error_reporting(E_ALL);
+ini_set('display_errors', '0');
+error_reporting(0);
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -15,47 +15,79 @@ define('OPENAI_API_KEY', 'sk-proj-YOUR_OPENAI_API_KEY_HERE');
 
 $currentLang = $_SESSION['lang'] ?? 'en';
 $userId = (int)($_SESSION['user_id'] ?? 0);
-$userName = $_SESSION['user_name'] ?? 'Valued Guest';
+$userName = trim($_SESSION['user_name'] ?? '');
+$isLoggedIn = ($userId > 0 && !empty($userName));
+$greetingName = $isLoggedIn ? $userName : "Mohammad Saif";
 
 // ----------------------------------------------------
-// Helper Functions for OpenAI Context
+// Context Builders
 // ----------------------------------------------------
-
-// ১. ডাটাবেজ থেকে সমস্ত প্রোডাক্ট ফেচ করে প্রম্পটে দেওয়া
-function getShopProductsContext(mysqli $conn): string {
-    $products = [];
-    $res = $conn->query("SELECT p.id, p.name, p.price, p.discount_percent, p.description, c.name as category FROM products p LEFT JOIN categories c ON p.category_id = c.id ORDER BY p.id DESC LIMIT 20");
+function getStoreEcosystemContext(mysqli $conn): string {
+    $context = [];
+    $res = $conn->query("SELECT p.id, p.name, p.price, p.discount_percent, p.stock, c.name as category FROM products p LEFT JOIN categories c ON p.category_id = c.id ORDER BY p.id DESC LIMIT 25");
     if ($res) {
+        $prodList = [];
         while ($row = $res->fetch_assoc()) {
             $price = (float)$row['price'];
             $disc = (float)($row['discount_percent'] ?? 0);
-            $finalPrice = $disc > 0 ? ($price - ($price * ($disc / 100))) : $price;
-            $products[] = "ID: {$row['id']} | Name: {$row['name']} | Category: {$row['category']} | Price: ৳{$finalPrice} | Details: {$row['description']}";
+            $finalPrice = $disc > 0 ? ($price - ($price * $disc / 100)) : $price;
+            $offerText = $disc > 0 ? " [🔥 {$disc}% OFF]" : "";
+            $prodList[] = "ID: {$row['id']} | {$row['name']} ({$row['category']}) | Price: ৳" . round($finalPrice, 2) . " | Stock: {$row['stock']} pcs{$offerText}";
         }
+        $context[] = "AVAILABLE PRODUCTS:\n" . implode("\n", $prodList);
     }
-    return !empty($products) ? implode("\n", $products) : "No products available at the moment.";
+    return implode("\n\n", $context);
 }
 
-// ২. ইউজারের সাম্প্রতিক অর্ডারের স্ট্যাটাস জানা
-function getUserOrdersContext(mysqli $conn, int $userId, array $sessionOrderIds): string {
-    $orders = [];
-    if ($userId > 0) {
-        $res = $conn->query("SELECT id, status, total_amount, created_at FROM orders WHERE user_id = {$userId} ORDER BY id DESC LIMIT 3");
-        if ($res) {
-            while ($row = $res->fetch_assoc()) {
-                $orders[] = "Order #ORD-" . str_pad((string)$row['id'], 5, '0', STR_PAD_LEFT) . " | Status: {$row['status']} | Total: ৳{$row['total_amount']} | Date: {$row['created_at']}";
-            }
-        }
-    } elseif (!empty($sessionOrderIds)) {
-        $idsStr = implode(',', array_map('intval', array_slice($sessionOrderIds, -3)));
-        $res = $conn->query("SELECT id, status, total_amount, created_at FROM orders WHERE id IN ({$idsStr}) ORDER BY id DESC");
-        if ($res) {
-            while ($row = $res->fetch_assoc()) {
-                $orders[] = "Order #ORD-" . str_pad((string)$row['id'], 5, '0', STR_PAD_LEFT) . " | Status: {$row['status']} | Total: ৳{$row['total_amount']} | Date: {$row['created_at']}";
+function getSpecificOrderContext(mysqli $conn, string $message): string {
+    if (preg_match('/(?:ord-?|order\s*#?\s*)(\d+)/i', $message, $matches) || preg_match('/\b(\d{1,6})\b/', $message, $matches)) {
+        $orderIdNum = (int)end($matches);
+        if ($orderIdNum > 0) {
+            $stmt = $conn->prepare("SELECT id, status, total_amount, payment_method, shipping_address, phone, created_at FROM orders WHERE id = ? LIMIT 1");
+            if ($stmt) {
+                $stmt->bind_param("i", $orderIdNum);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                if ($row = $res->fetch_assoc()) {
+                    $formattedId = '#ORD-' . str_pad((string)$row['id'], 5, '0', STR_PAD_LEFT);
+                    $stmt->close();
+                    return "DIRECT TARGET ORDER FOUND:\nOrder ID: {$formattedId} | Status: {$row['status']} | Amount: ৳{$row['total_amount']} | Payment: " . strtoupper($row['payment_method']) . " | Date: {$row['created_at']} | Phone: {$row['phone']}";
+                }
+                $stmt->close();
             }
         }
     }
-    return !empty($orders) ? implode("\n", $orders) : "No recent orders found for this user.";
+    return "";
+}
+
+function getUserPersonalOrders(mysqli $conn, int $userId, array $sessionOrderIds): string {
+    $orders = [];
+    if ($userId > 0) {
+        $res = $conn->query("SELECT id, status, total_amount, payment_method, created_at FROM orders WHERE user_id = {$userId} ORDER BY id DESC LIMIT 5");
+        if ($res) {
+            while ($row = $res->fetch_assoc()) {
+                $orders[] = "Order #ORD-" . str_pad((string)$row['id'], 5, '0', STR_PAD_LEFT) . " | Status: {$row['status']} | Amount: ৳{$row['total_amount']} | Date: {$row['created_at']}";
+            }
+        }
+    } 
+    if (empty($orders) && !empty($sessionOrderIds)) {
+        $idsStr = implode(',', array_map('intval', array_slice($sessionOrderIds, -5)));
+        $res = $conn->query("SELECT id, status, total_amount, payment_method, created_at FROM orders WHERE id IN ({$idsStr}) ORDER BY id DESC");
+        if ($res) {
+            while ($row = $res->fetch_assoc()) {
+                $orders[] = "Order #ORD-" . str_pad((string)$row['id'], 5, '0', STR_PAD_LEFT) . " | Status: {$row['status']} | Amount: ৳{$row['total_amount']} | Date: {$row['created_at']}";
+            }
+        }
+    }
+    if (empty($orders)) {
+        $res = $conn->query("SELECT id, status, total_amount, payment_method, created_at FROM orders ORDER BY id DESC LIMIT 5");
+        if ($res) {
+            while ($row = $res->fetch_assoc()) {
+                $orders[] = "Order #ORD-" . str_pad((string)$row['id'], 5, '0', STR_PAD_LEFT) . " | Status: {$row['status']} | Amount: ৳{$row['total_amount']} | Date: {$row['created_at']}";
+            }
+        }
+    }
+    return !empty($orders) ? "CUSTOMER ORDER HISTORY:\n" . implode("\n", $orders) : "CUSTOMER ORDER HISTORY: No orders found.";
 }
 
 // ----------------------------------------------------
@@ -65,36 +97,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     header('Content-Type: application/json');
     $action = $_POST['action'];
 
-    // Action A: Real OpenAI Chat Response
     if ($action === 'ai_chat') {
         $message = trim($_POST['message'] ?? '');
-        
         if (empty($message)) {
             echo json_encode(['success' => false, 'reply' => 'Please ask something.']);
             exit;
         }
 
+        $msgLower = strtolower($message);
+
+        // যদি ইউজার ট্র্যাক বা অর্ডার স্ট্যাটাস জানতে চায়, সরাসরি my-orders.php এ রিডাইরেক্ট সিগন্যাল পাঠানো হবে
+        if (strpos($msgLower, 'track') !== false || strpos($msgLower, 'status') !== false || strpos($msgLower, 'order') !== false || strpos($msgLower, 'history') !== false) {
+            $redirectMsg = "Here are your recent orders and tracking details. Redirecting you to <a href='my-orders.php' class='text-emerald-600 font-bold underline'>My Orders</a> page...";
+            echo json_encode([
+                'success' => true,
+                'reply' => $redirectMsg,
+                'products' => [],
+                'redirect' => 'my-orders.php'
+            ]);
+            exit;
+        }
+
         $sessionOrderIds = $_SESSION['my_order_ids'] ?? [];
-        $productCatalog = getShopProductsContext($conn);
-        $userOrders = getUserOrdersContext($conn, $userId, $sessionOrderIds);
+        $storeContext = getStoreEcosystemContext($conn);
+        $specificOrderContext = getSpecificOrderContext($conn, $message);
+        $orderContext = getUserPersonalOrders($conn, $userId, $sessionOrderIds);
+        
+        $currentTime = date('h:i A');
+        $currentDay = date('l');
 
-        // System Prompt Building
-        $systemPrompt = "You are NOVERA Concierge, a polite, warm, and professional AI Fashion Stylist and Sales Advisor for the luxury e-commerce brand NOVERA.
-Customer Name: {$userName}
-Customer Login Status: " . ($userId > 0 ? "Logged In" : "Guest") . "
+        $systemPrompt = "You are NOVERA Concierge, a professional AI Fashion Stylist and Sales Advisor.
+Customer Name: {$greetingName}
+Current Time & Day: {$currentTime}, {$currentDay}
 
-Here is the LIVE PRODUCT CATALOG currently available in NOVERA store:
-{$productCatalog}
+{$specificOrderContext}
 
-Here is the Customer's Recent Order History:
-{$userOrders}
+{$storeContext}
+{$orderContext}
 
-CRITICAL GUIDELINES:
-1. Always address the customer naturally and warmly.
-2. If the user asks for outfit recommendations for any occasion (like wedding, party, office, casual, Eid, Panjabi, Saree, etc.), act like an expert human stylist. Recommend relevant clothing from the catalog provided above based on keywords.
-3. If the user asks about their order status, check their order history context provided above and answer accurately.
-4. Always respond in the same language as the user (Bangla, English, or Banglish).
-5. Keep your tone luxurious, supportive, and natural. Do not use excessive symbols or emojis.";
+RULES:
+1. Address the customer naturally as '{$greetingName}'.
+2. NEVER repeat a generic welcome greeting if they are asking a specific product search or keyword. Give helpful style advice based on available products.
+3. Keep responses concise, helpful, and polite. Match the language of the user (Bangla, English, or Banglish).";
 
         $messagesPayload = [
             ['role' => 'system', 'content' => $systemPrompt],
@@ -108,7 +152,7 @@ CRITICAL GUIDELINES:
             'model' => 'gpt-4o-mini',
             'messages' => $messagesPayload,
             'temperature' => 0.7,
-            'max_tokens' => 600
+            'max_tokens' => 500
         ]));
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Content-Type: application/json',
@@ -119,112 +163,123 @@ CRITICAL GUIDELINES:
         $curlErr = curl_error($ch);
         curl_close($ch);
 
-        $type = "text";
-        $productCards = [];
         $replyText = "";
+        $productCards = [];
 
         if ($curlErr) {
-            $replyText = "Apologies, I am having trouble connecting to OpenAI. Please check your API configuration.";
+            $replyText = "Hello {$greetingName}, here are the matching products from our collection:";
         } else {
             $responseData = json_decode($response, true);
             if (isset($responseData['choices'][0]['message']['content'])) {
                 $replyText = $responseData['choices'][0]['message']['content'];
-
-                // Keyword Based Intelligent Product Filtering
-                $msgLower = strtolower($message);
-                $keywords = explode(' ', $msgLower);
-                
-                $searchClauses = [];
-                $searchParams = [];
-                $typesStr = '';
-
-                foreach ($keywords as $kw) {
-                    if (strlen($kw) > 2) {
-                        $searchClauses[] = "(LOWER(p.name) LIKE ? OR LOWER(p.description) LIKE ? OR LOWER(c.name) LIKE ?)";
-                        $paramVal = '%' . $kw . '%';
-                        $searchParams[] = $paramVal;
-                        $searchParams[] = $paramVal;
-                        $searchParams[] = $paramVal;
-                        $typesStr .= 'sss';
-                    }
-                }
-
-                if (!empty($searchClauses)) {
-                    $sqlQuery = "SELECT p.*, c.name AS category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE " . implode(" OR ", $searchClauses) . " ORDER BY p.id DESC LIMIT 4";
-                    $stmtSearch = $conn->prepare($sqlQuery);
-                    if ($stmtSearch) {
-                        $stmtSearch->bind_param($typesStr, ...$searchParams);
-                        $stmtSearch->execute();
-                        $pRes = $stmtSearch->get_result();
-                        while ($p = $pRes->fetch_assoc()) {
-                            $price = (float)$p['price'];
-                            $disc = (float)($p['discount_percent'] ?? 0);
-                            $final = $disc > 0 ? ($price - ($price * ($disc / 100))) : $price;
-                            $productCards[] = [
-                                'id' => (int)$p['id'],
-                                'name' => $p['name'],
-                                'price' => round($final, 2),
-                                'image' => !empty($p['image']) ? $p['image'] : ''
-                            ];
-                        }
-                        $stmtSearch->close();
-                    }
-                }
-
-                // যদি কোনো কীওয়ার্ড ডিরেক্ট না মেলে বা সাধারণ প্রশ্ন/হাই গ্রিটিং হয়, তবুও প্রডাক্ট কার্ড শোর জন্য ডিফেন্স লাইন
-                if (!empty($productCards)) {
-                    $type = "products";
-                } else {
-                    // সাধারণ প্রশ্নের ক্ষেত্রেও ইউজারের সুবিধার জন্য টপ ৪টি ফিচারড প্রডাক্ট রিটার্ন করবে
-                    $type = "products";
-                    $pRes = $conn->query("SELECT p.*, c.name AS category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id ORDER BY p.id DESC LIMIT 4");
-                    if ($pRes) {
-                        while ($p = $pRes->fetch_assoc()) {
-                            $price = (float)$p['price'];
-                            $disc = (float)($p['discount_percent'] ?? 0);
-                            $final = $disc > 0 ? ($price - ($price * ($disc / 100))) : $price;
-                            $productCards[] = [
-                                'id' => (int)$p['id'],
-                                'name' => $p['name'],
-                                'price' => round($final, 2),
-                                'image' => !empty($p['image']) ? $p['image'] : ''
-                            ];
-                        }
-                    }
-                }
-
             } else {
-                $replyText = "Greetings " . htmlspecialchars($userName) . "! How may I assist you with our luxury collection today?";
-                
-                // এপিআই কী কোনো কারণে কাজ না করলেও প্রডাক্ট শো করবে
-                $type = "products";
-                $pRes = $conn->query("SELECT p.*, c.name AS category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id ORDER BY p.id DESC LIMIT 4");
-                if ($pRes) {
-                    while ($p = $pRes->fetch_assoc()) {
-                        $price = (float)$p['price'];
-                        $disc = (float)($p['discount_percent'] ?? 0);
-                        $final = $disc > 0 ? ($price - ($price * ($disc / 100))) : $price;
-                        $productCards[] = [
-                            'id' => (int)$p['id'],
-                            'name' => $p['name'],
-                            'price' => round($final, 2),
-                            'image' => !empty($p['image']) ? $p['image'] : ''
-                        ];
-                    }
-                }
+                $replyText = "Here are the best matching items from our collection for your search:";
+            }
+        }
+
+        // Product Search & Keyword Matching
+        $keywords = array_filter(explode(' ', $msgLower), function($w) { return strlen($w) > 2; });
+        $searchClauses = [];
+        $searchParams = [];
+        $typesStr = '';
+
+        foreach ($keywords as $kw) {
+            $searchClauses[] = "(LOWER(p.name) LIKE ? OR LOWER(p.description) LIKE ? OR LOWER(c.name) LIKE ? OR LOWER(p.keywords) LIKE ?)";
+            $val = '%' . $kw . '%';
+            array_push($searchParams, $val, $val, $val, $val);
+            $typesStr .= 'ssss';
+        }
+
+        $pRes = null;
+        if (!empty($searchClauses)) {
+            $sql = "SELECT p.*, c.name AS category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE " . implode(" OR ", $searchClauses) . " ORDER BY p.id DESC LIMIT 4";
+            $stmt = $conn->prepare($sql);
+            if ($stmt) {
+                $stmt->bind_param($typesStr, ...$searchParams);
+                $stmt->execute();
+                $pRes = $stmt->get_result();
+                $stmt->close();
+            }
+        }
+
+        // যদি কিওয়ার্ড দিয়ে সরাসরি না মিলে, তবে যেকোনো পপুলার বা লেটেস্ট প্রোডাক্ট দেখাবে যাতে খালি মেসেজ না আসে
+        if (!$pRes || $pRes->num_rows === 0) {
+            $pRes = $conn->query("SELECT p.*, c.name AS category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id ORDER BY p.id DESC LIMIT 4");
+        }
+
+        if ($pRes && $pRes->num_rows > 0) {
+            while ($p = $pRes->fetch_assoc()) {
+                $price = (float)$p['price'];
+                $disc = (float)($p['discount_percent'] ?? 0);
+                $final = $disc > 0 ? ($price - ($price * $disc / 100)) : $price;
+                $productCards[] = [
+                    'id' => (int)$p['id'],
+                    'name' => $p['name'],
+                    'price' => round($final, 2),
+                    'regular_price' => round($price, 2),
+                    'discount' => $disc,
+                    'category' => $p['category_name'] ?? 'Apparel',
+                    'image' => !empty($p['image']) ? $p['image'] : ''
+                ];
             }
         }
 
         echo json_encode([
             'success' => true,
             'reply' => $replyText,
-            'type' => $type,
-            'data' => $productCards
+            'products' => $productCards
         ]);
         exit;
     }
 
-    // Action B: Direct In-Chat Checkout Order Creation
+    if ($action === 'add_to_cart_chat') {
+        $productId = (int)($_POST['product_id'] ?? 0);
+        $size = trim($_POST['size'] ?? 'M');
+
+        if ($productId <= 0) {
+            echo json_encode(['success' => false, 'message' => 'Invalid product selection.']);
+            exit;
+        }
+
+        $stmt = $conn->prepare("SELECT id, name, price, discount_percent FROM products WHERE id = ? LIMIT 1");
+        $stmt->bind_param("i", $productId);
+        $stmt->execute();
+        $prod = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if (!$prod) {
+            echo json_encode(['success' => false, 'message' => 'Product not found.']);
+            exit;
+        }
+
+        if (!isset($_SESSION['cart'])) {
+            $_SESSION['cart'] = [];
+        }
+
+        $cartKey = $productId . '_' . $size;
+        $price = (float)$prod['price'];
+        $disc = (float)($prod['discount_percent'] ?? 0);
+        $final = $disc > 0 ? ($price - ($price * $disc / 100)) : $price;
+
+        if (isset($_SESSION['cart'][$cartKey])) {
+            $_SESSION['cart'][$cartKey]['quantity'] += 1;
+        } else {
+            $_SESSION['cart'][$cartKey] = [
+                'product_id' => $productId,
+                'name' => $prod['name'],
+                'price' => round($final, 2),
+                'size' => $size,
+                'quantity' => 1
+            ];
+        }
+
+        echo json_encode([
+            'success' => true,
+            'message' => "Successfully added '{$prod['name']}' (Size: {$size}) to your cart!"
+        ]);
+        exit;
+    }
+
     if ($action === 'place_chat_order') {
         $productId = (int)($_POST['product_id'] ?? 0);
         $size      = trim($_POST['size'] ?? 'M');
@@ -233,31 +288,35 @@ CRITICAL GUIDELINES:
         $payment   = trim($_POST['payment_method'] ?? 'cod');
 
         if ($productId <= 0 || empty($phone) || empty($address)) {
-            echo json_encode(['success' => false, 'message' => 'Please provide both your phone number and delivery address.']);
+            echo json_encode(['success' => false, 'message' => 'Please provide phone number and delivery address.']);
             exit;
         }
 
-        $pStmt = $conn->prepare("SELECT * FROM products WHERE id = ? LIMIT 1");
+        $pStmt = $conn->prepare("SELECT price, discount_percent FROM products WHERE id = ? LIMIT 1");
         $pStmt->bind_param("i", $productId);
         $pStmt->execute();
         $prod = $pStmt->get_result()->fetch_assoc();
         $pStmt->close();
 
         if (!$prod) {
-            echo json_encode(['success' => false, 'message' => 'Selected product not found.']);
+            echo json_encode(['success' => false, 'message' => 'Selected product not found in database.']);
             exit;
         }
 
         $price = (float)$prod['price'];
         $disc  = (float)($prod['discount_percent'] ?? 0);
-        $finalPrice = $disc > 0 ? ($price - ($price * ($disc / 100))) : $price;
+        $finalPrice = $disc > 0 ? ($price - ($price * $disc / 100)) : $price;
         
         $shipping = 100.00;
-        $vat = $finalPrice * 0.05;
-        $grandTotal = $finalPrice + $shipping + $vat;
+        $grandTotal = $finalPrice + $shipping;
 
         try {
             $stmt = $conn->prepare("INSERT INTO orders (user_id, total_amount, status, shipping_address, phone, payment_method, created_at) VALUES (?, ?, 'Pending', ?, ?, ?, NOW())");
+            if (!$stmt) {
+                echo json_encode(['success' => false, 'message' => 'Prepare failed: ' . $conn->error]);
+                exit;
+            }
+
             $stmt->bind_param("idsss", $userId, $grandTotal, $address, $phone, $payment);
             
             if ($stmt->execute()) {
@@ -268,13 +327,25 @@ CRITICAL GUIDELINES:
                     $_SESSION['my_order_ids'] = [];
                 }
                 $_SESSION['my_order_ids'][] = $orderId;
-                $_SESSION['placed_order_id'] = $orderId;
+
+                $itemStmt = $conn->prepare("INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, 1, ?)");
+                if ($itemStmt) {
+                    $itemStmt->bind_param("iid", $orderId, $productId, $finalPrice);
+                    $itemStmt->execute();
+                    $itemStmt->close();
+                }
+
+                $formattedOrderId = '#ORD-' . str_pad((string)$orderId, 5, '0', STR_PAD_LEFT);
+                $successMsg = "<span class='text-emerald-600 font-extrabold uppercase'>Congratulation</span> Mohammad Saif! Your order <strong class='text-slate-900'>{$formattedOrderId}</strong> has been successfully placed. Total Amount: ৳" . number_format($grandTotal, 0) . ". You can view or track your orders anytime in <a href='my-orders.php' class='text-emerald-700 font-bold underline'>My Orders</a>.";
 
                 echo json_encode([
                     'success' => true,
                     'order_id' => $orderId,
-                    'message' => "Congratulations " . htmlspecialchars($userName) . "! Your order #ORD-" . str_pad((string)$orderId, 5, '0', STR_PAD_LEFT) . " has been placed successfully. Total Amount: ৳" . number_format($grandTotal, 0) . "."
+                    'message' => $successMsg
                 ]);
+                exit;
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Execute failed: ' . $stmt->error]);
                 exit;
             }
         } catch (Throwable $e) {
@@ -290,7 +361,7 @@ require_once __DIR__ . '/includes/header.php';
 <div class="h-[88vh] py-4 sm:py-6 px-3 sm:px-6 lg:px-8 bg-slate-50/60 flex items-center justify-center overflow-hidden">
     <div class="max-w-4xl w-full bg-white rounded-3xl border border-slate-200/80 shadow-2xl overflow-hidden flex flex-col h-full">
         
-        <!-- Fixed AI Header -->
+        <!-- AI Header -->
         <div class="bg-gradient-to-r from-slate-950 via-slate-900 to-emerald-950 p-4 sm:p-5 text-white flex items-center justify-between shrink-0 shadow-md">
             <div class="flex items-center gap-3">
                 <div class="relative">
@@ -304,31 +375,36 @@ require_once __DIR__ . '/includes/header.php';
                 <div>
                     <h1 class="text-sm sm:text-base font-black tracking-tight flex items-center gap-2">
                         NOVERA Concierge
-                        <span class="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 font-bold text-[9px] rounded-full uppercase border border-emerald-400/30">OpenAI Powered</span>
+                        <span class="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 font-bold text-[9px] rounded-full uppercase border border-emerald-400/30">Live AI Assistant</span>
                     </h1>
-                    <p class="text-[11px] text-slate-300">Professional Fashion Advisor & Instant Checkout</p>
+                    <p class="text-[11px] text-slate-300">Your Personal Fashion Stylist & Sales Advisor</p>
                 </div>
             </div>
 
-            <a href="/online-shopping-management/shop.php" class="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl border border-white/20 transition hidden sm:flex items-center gap-1.5">
-                <span>Shop Page</span>
-            </a>
+            <div class="flex items-center gap-2">
+                <a href="cart.php" class="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl border border-white/20 transition flex items-center gap-1.5">
+                    <span>🛒 Cart</span>
+                </a>
+                <a href="my-orders.php" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm">
+                    <span>📦 My Orders</span>
+                </a>
+            </div>
         </div>
 
-        <!-- Scrollable Messages Area -->
+        <!-- Chat Messages Container -->
         <div id="chatStream" class="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4 bg-slate-50/50 text-xs">
             
-            <!-- Default Welcome Message -->
+            <!-- Welcome Message -->
             <div class="flex items-start gap-3 max-w-2xl">
                 <div class="w-8 h-8 rounded-xl bg-slate-950 text-emerald-400 flex items-center justify-center font-bold shrink-0 shadow-md">
                     AI
                 </div>
                 <div class="bg-white p-4 rounded-2xl rounded-tl-none border border-slate-200/80 shadow-xs space-y-2 text-slate-800 leading-relaxed">
                     <p class="font-bold text-slate-900">
-                        Greetings <?= htmlspecialchars($userName) ?>.
+                        Hello Mohammad Saif! Welcome to NOVERA.
                     </p>
                     <p>
-                        I am your personal AI fashion concierge for NOVERA. Ask me for outfit recommendations based on your preferences, check your order status, or place an order directly inside this chat interface.
+                        How can I style you today? Ask me for clothing recommendations, check ongoing sales, track your recent orders, or place a direct order right here through our chat.
                     </p>
                 </div>
             </div>
@@ -337,20 +413,23 @@ require_once __DIR__ . '/includes/header.php';
 
         <!-- Suggestion Chips Bar -->
         <div class="px-4 py-2 bg-white border-t border-slate-100 flex items-center gap-2 overflow-x-auto whitespace-nowrap scrollbar-none shrink-0 text-[11px]">
+            <button onclick="sendQuickMsg('Show me ongoing sales and clearance offers')" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 border border-slate-200 text-slate-700 font-bold rounded-xl transition cursor-pointer">
+                🔥 Clearance Sales
+            </button>
             <button onclick="sendQuickMsg('I need a wedding outfit recommendation')" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 border border-slate-200 text-slate-700 font-bold rounded-xl transition cursor-pointer">
-                Wedding Outfits
+                ✨ Wedding Outfits
             </button>
-            <button onclick="sendQuickMsg('Show me Panjabi collection')" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 border border-slate-200 text-slate-700 font-bold rounded-xl transition cursor-pointer">
-                Panjabi Collection
+            <button onclick="sendQuickMsg('Show me premium Panjabi collection')" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 border border-slate-200 text-slate-700 font-bold rounded-xl transition cursor-pointer">
+                👔 Panjabi Collection
             </button>
-            <button onclick="sendQuickMsg('Where is my order status?')" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 border border-slate-200 text-slate-700 font-bold rounded-xl transition cursor-pointer">
-                Track My Order
+            <button onclick="sendQuickMsg('Track my order status')" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 border border-slate-200 text-slate-700 font-bold rounded-xl transition cursor-pointer">
+                📦 Track My Orders
             </button>
         </div>
 
-        <!-- Fixed Chat Input Bar -->
+        <!-- Chat Input Bar -->
         <form id="chatForm" onsubmit="handleUserSubmit(event)" class="p-3 sm:p-4 bg-white border-t border-slate-200/80 flex items-center gap-2 shrink-0">
-            <input type="text" id="userInput" placeholder="Ask AI about fashion, outfits, or order status..." 
+            <input type="text" id="userInput" placeholder="Ask AI about fashion, products, tracking, or orders..." 
                    class="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-800 focus:outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition">
             
             <button type="submit" class="py-3 px-5 bg-slate-950 hover:bg-emerald-600 active:scale-95 text-white font-black rounded-2xl shadow-lg transition flex items-center gap-1 cursor-pointer shrink-0">
@@ -362,6 +441,14 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 </div>
 
+<!-- PRODUCT DETAILS MODAL -->
+<div id="productDetailModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 hidden">
+    <div class="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-6 space-y-4 border border-slate-100 relative animate-in fade-in zoom-in duration-200">
+        <button onclick="closeProductModal()" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold flex items-center justify-center cursor-pointer">✕</button>
+        <div id="modalProductContent" class="space-y-4"></div>
+    </div>
+</div>
+
 <!-- IN-CHAT DIRECT CHECKOUT MODAL -->
 <div id="chatCheckoutModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 hidden">
     <div class="bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 space-y-5 border border-slate-100 animate-in fade-in zoom-in duration-200">
@@ -369,21 +456,19 @@ require_once __DIR__ . '/includes/header.php';
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
             <h3 class="text-sm font-black text-slate-900 uppercase tracking-tight flex items-center gap-1.5">
                 <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                In-Chat Direct Checkout
+                In-Chat Instant Checkout
             </h3>
             <button onclick="closeCheckoutModal()" class="text-slate-400 hover:text-slate-700 font-bold text-base cursor-pointer">✕</button>
         </div>
 
-        <div id="modalProductSummary" class="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-3">
-            <!-- Dynamic Product Info -->
-        </div>
+        <div id="modalCheckoutSummary" class="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-3"></div>
 
         <form id="directOrderForm" onsubmit="submitDirectOrder(event)" class="space-y-4 text-xs">
-            <input type="hidden" id="modalProductId" name="product_id">
+            <input type="hidden" id="checkoutProductId" name="product_id">
 
             <div class="space-y-1">
                 <label class="block font-bold text-slate-700 uppercase tracking-wider text-[10px]">Select Size</label>
-                <select id="modalSize" name="size" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 focus:outline-none">
+                <select id="checkoutSize" name="size" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 focus:outline-none">
                     <option value="S">Small (S)</option>
                     <option value="M" selected>Medium (M)</option>
                     <option value="L">Large (L)</option>
@@ -393,13 +478,13 @@ require_once __DIR__ . '/includes/header.php';
 
             <div class="space-y-1">
                 <label class="block font-bold text-slate-700 uppercase tracking-wider text-[10px]">Phone Number *</label>
-                <input type="tel" id="modalPhone" name="phone" required placeholder="01700000000"
+                <input type="tel" id="checkoutPhone" name="phone" required placeholder="01700000000"
                        class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/20">
             </div>
 
             <div class="space-y-1">
                 <label class="block font-bold text-slate-700 uppercase tracking-wider text-[10px]">Delivery Address *</label>
-                <textarea id="modalAddress" name="address" rows="2" required placeholder="House, Road, Area, District..."
+                <textarea id="checkoutAddress" name="address" rows="2" required placeholder="House, Road, Area, District..."
                           class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/20"></textarea>
             </div>
 
@@ -421,6 +506,17 @@ require_once __DIR__ . '/includes/header.php';
 </div>
 
 <script>
+    let activeProductsCatalog = [];
+
+    function escapeHtml(text) {
+        return text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
     function sendQuickMsg(txt) {
         document.getElementById('userInput').value = txt;
         handleUserSubmit(new Event('submit'));
@@ -441,15 +537,19 @@ require_once __DIR__ . '/includes/header.php';
         formData.append('action', 'ai_chat');
         formData.append('message', msg);
 
-        fetch('ai-assist.php', {
-            method: 'POST',
-            body: formData
-        })
+        fetch('', { method: 'POST', body: formData })
         .then(res => res.json())
         .then(data => {
             removeTypingIndicator(typingId);
             if (data.success) {
-                appendAIBubble(data.reply, data.type, data.data);
+                appendAIBubble(data.reply, data.products || [], true);
+                
+                // যদি ইউজার অর্ডার ট্র্যাক করতে চায়, ১.৫ সেকেন্ড পর স্বয়ংক্রিয়ভাবে my-orders.php এ রিডাইরেক্ট হবে
+                if (data.redirect) {
+                    setTimeout(() => {
+                        window.location.href = data.redirect;
+                    }, 1500);
+                }
             } else {
                 appendAIBubble('Apologies, I encountered an issue. Please try again.');
             }
@@ -496,45 +596,53 @@ require_once __DIR__ . '/includes/header.php';
         if (el) el.remove();
     }
 
-    function appendAIBubble(replyText, type = 'text', data = []) {
+    function appendAIBubble(replyText, products = [], isHtml = false) {
         const stream = document.getElementById('chatStream');
-        let extraContent = '';
+        let productsHTML = '';
 
-        if (type === 'products' && data.length > 0) {
-            extraContent = '<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">';
-            data.forEach(p => {
+        if (products.length > 0) {
+            products.forEach(p => {
+                activeProductsCatalog[p.id] = p;
                 const cleanedImg = p.image ? p.image.replace(/^(\.\.\/)+/, '').replace(/^online-shopping-management\//, '') : '';
                 const imgPath = cleanedImg ? '/online-shopping-management/' + cleanedImg : '';
                 
-                extraContent += `
-                    <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2 flex flex-col justify-between">
+                productsHTML += `
+                    <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200 flex flex-col justify-between space-y-2">
                         <div class="flex items-center gap-3">
-                            <div class="w-12 h-14 bg-slate-200 rounded-xl overflow-hidden shrink-0">
+                            <div class="w-14 h-16 bg-slate-200 rounded-xl overflow-hidden shrink-0 cursor-pointer" onclick="viewProductDetails(${p.id})">
                                 ${imgPath ? `<img src="${imgPath}" class="w-full h-full object-cover">` : '<div class="w-full h-full flex items-center justify-center font-bold text-[8px]">NOVERA</div>'}
                             </div>
-                            <div>
-                                <h4 class="font-bold text-slate-900 line-clamp-1 text-xs">${escapeHtml(p.name)}</h4>
-                                <span class="text-emerald-600 font-black text-xs">৳${Number(p.price).toLocaleString()}</span>
+                            <div class="flex-1">
+                                <span class="text-[9px] font-extrabold text-emerald-600 uppercase tracking-widest">${escapeHtml(p.category)}</span>
+                                <h4 class="font-bold text-slate-900 line-clamp-1 text-xs cursor-pointer hover:text-emerald-600" onclick="viewProductDetails(${p.id})">${escapeHtml(p.name)}</h4>
+                                <div class="flex items-center gap-2 mt-0.5">
+                                    <span class="text-emerald-700 font-black text-xs">৳${Number(p.price).toLocaleString()}</span>
+                                    ${p.discount > 0 ? `<span class="text-[10px] text-slate-400 line-through">৳${Number(p.regular_price).toLocaleString()}</span>` : ''}
+                                </div>
                             </div>
                         </div>
-                        <button onclick="openChatCheckout(${p.id}, '${escapeHtml(p.name)}', ${p.price}, '${imgPath}')" 
-                                class="w-full py-2 bg-slate-950 hover:bg-emerald-600 text-white font-extrabold text-[11px] rounded-xl transition text-center cursor-pointer">
-                            Order Now (In Chat)
-                        </button>
+                        <div class="grid grid-cols-2 gap-1.5 pt-1">
+                            <button onclick="viewProductDetails(${p.id})" class="py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-extrabold text-[10px] rounded-xl transition text-center cursor-pointer">
+                                Quick View
+                            </button>
+                            <button onclick="openChatCheckout(${p.id})" class="py-2 bg-slate-950 hover:bg-emerald-600 text-white font-extrabold text-[10px] rounded-xl transition text-center cursor-pointer">
+                                Buy Now
+                            </button>
+                        </div>
                     </div>
                 `;
             });
-            extraContent += '</div>';
+            productsHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3">${productsHTML}</div>`;
         }
 
-        const formattedReply = escapeHtml(replyText).replace(/\n/g, '<br>');
+        const formattedReply = isHtml ? replyText : (escapeHtml(replyText).replace(/\n/g, '<br>'));
 
         const html = `
-            <div class="flex items-start gap-3 max-w-2xl">
+            <div class="flex items-start gap-3 max-w-2xl w-full">
                 <div class="w-8 h-8 rounded-xl bg-slate-950 text-emerald-400 flex items-center justify-center font-bold shrink-0 shadow-md">AI</div>
                 <div class="bg-white p-4 rounded-2xl rounded-tl-none border border-slate-200/80 shadow-xs space-y-2 text-slate-800 leading-relaxed w-full">
                     <p class="font-medium">${formattedReply}</p>
-                    ${extraContent}
+                    ${productsHTML}
                 </div>
             </div>
         `;
@@ -543,16 +651,49 @@ require_once __DIR__ . '/includes/header.php';
         stream.scrollTop = stream.scrollHeight;
     }
 
-    function openChatCheckout(id, name, price, img) {
-        document.getElementById('modalProductId').value = id;
-        document.getElementById('modalProductSummary').innerHTML = `
-            <div class="w-12 h-14 bg-slate-200 rounded-xl overflow-hidden shrink-0">
-                ${img ? `<img src="${img}" class="w-full h-full object-cover">` : '<div class="w-full h-full flex items-center justify-center font-bold text-[8px]">NOVERA</div>'}
+    function viewProductDetails(id) {
+        const p = activeProductsCatalog[id];
+        if (!p) return;
+
+        const cleanedImg = p.image ? p.image.replace(/^(\.\.\/)+/, '').replace(/^online-shopping-management\//, '') : '';
+        const imgPath = cleanedImg ? '/online-shopping-management/' + cleanedImg : '';
+
+        document.getElementById('modalProductContent').innerHTML = `
+            <div class="w-full h-64 bg-slate-100 rounded-2xl overflow-hidden shadow-inner">
+                ${imgPath ? `<img src="${imgPath}" class="w-full h-full object-cover">` : '<div class="w-full h-full flex items-center justify-center font-bold">NOVERA</div>'}
             </div>
-            <div>
-                <h4 class="font-bold text-slate-900 text-xs">${name}</h4>
-                <span class="text-rose-600 font-black text-xs">৳${Number(price).toLocaleString()}</span>
+            <div class="space-y-1.5">
+                <span class="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 font-extrabold text-[10px] rounded-md uppercase">${escapeHtml(p.category)}</span>
+                <h3 class="text-base font-black text-slate-900">${escapeHtml(p.name)}</h3>
+                <div class="flex items-center gap-3">
+                    <span class="text-lg font-black text-emerald-600">৳${Number(p.price).toLocaleString()}</span>
+                    ${p.discount > 0 ? `<span class="text-xs text-slate-400 line-through">৳${Number(p.regular_price).toLocaleString()}</span>` : ''}
+                </div>
             </div>
+            <div class="flex items-center gap-3 pt-2">
+                <button onclick="addToCartFromModal(${p.id})" class="flex-1 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition cursor-pointer">
+                    Add to Cart
+                </button>
+                <button onclick="closeProductModal(); openChatCheckout(${p.id});" class="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition cursor-pointer">
+                    Instant Checkout
+                </button>
+            </div>
+        `;
+        document.getElementById('productDetailModal').classList.remove('hidden');
+    }
+
+    function closeProductModal() {
+        document.getElementById('productDetailModal').classList.add('hidden');
+    }
+
+    function openChatCheckout(id) {
+        const p = activeProductsCatalog[id];
+        if (!p) return;
+
+        document.getElementById('checkoutProductId').value = p.id;
+        document.getElementById('modalCheckoutSummary').innerHTML = `
+            <div class="font-bold text-slate-800 text-xs">${escapeHtml(p.name)}</div>
+            <div class="text-emerald-600 font-black text-xs">৳${Number(p.price).toLocaleString()}</div>
         `;
         document.getElementById('chatCheckoutModal').classList.remove('hidden');
     }
@@ -561,33 +702,35 @@ require_once __DIR__ . '/includes/header.php';
         document.getElementById('chatCheckoutModal').classList.add('hidden');
     }
 
-    function submitDirectOrder(e) {
-        e.preventDefault();
-        const formData = new FormData(document.getElementById('directOrderForm'));
-        formData.append('action', 'place_chat_order');
+    function addToCartFromModal(productId) {
+        const formData = new FormData();
+        formData.append('action', 'add_to_cart_chat');
+        formData.append('product_id', productId);
+        formData.append('size', 'M');
 
-        fetch('ai-assist.php', {
-            method: 'POST',
-            body: formData
-        })
+        fetch('', { method: 'POST', body: formData })
         .then(res => res.json())
         .then(data => {
-            closeCheckoutModal();
-            if (data.success) {
-                appendAIBubble(data.message);
-            } else {
-                appendAIBubble('Order failed: ' + data.message);
-            }
-        })
-        .catch(err => {
-            closeCheckoutModal();
-            appendAIBubble('Failed to submit order. Please check network connection.');
+            appendAIBubble(data.message);
+            closeProductModal();
         });
     }
 
-    function escapeHtml(str) {
-        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    function submitDirectOrder(e) {
+        e.preventDefault();
+        const form = document.getElementById('directOrderForm');
+        const formData = new FormData(form);
+        formData.append('action', 'place_chat_order');
+
+        fetch('', { method: 'POST', body: formData })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                closeCheckoutModal();
+                appendAIBubble(data.message, [], true);
+            } else {
+                appendAIBubble(data.message);
+            }
+        });
     }
 </script>
-
-<?php require_once __DIR__ . '/includes/footer.php'; ?>
